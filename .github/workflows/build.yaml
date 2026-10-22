@@ -1,5 +1,10 @@
 name: CI
 
+env:
+  # Tag builds keep the exact release tag; branch and pull-request builds let
+  # build-common.bash derive a git-describe identity including lightweight tags.
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+
 on:
   push:
     branches: [master, next]
@@ -44,7 +49,6 @@ jobs:
       #       ${{ runner.os }}-npm-
       - name: Build macOS
         run: |
-          export VERSION=$(git describe --always)
           ./build-macos.bash
       - uses: actions/upload-artifact@v4
         with:
@@ -62,13 +66,11 @@ jobs:
         run: git fetch --tags --force
       - name: Install dependencies
         run: |
-          export VERSION=$(git describe --always)
           sudo apt update
           sudo apt install flatpak-builder flatpak ca-certificates
           git config --global protocol.file.allow always
       - name: Set up Flatpak
         run: |
-          export VERSION=$(git describe --always)
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
       # Cache Flatpak build. Build state now lives in machine-local dirs (see
       # build-common.bash): ~/.cache/gephgui-pkg holds the host-side staging +
@@ -168,7 +170,6 @@ jobs:
             ${{ runner.os }}-npm-
       - name: Build Windows
         run: |
-          $env:VERSION = $(git describe --always)
           $env:PATH += ";C:\Users\runneradmin\.cargo\bin"
           $env:CARGO_NET_GIT_FETCH_WITH_CLI = "true"
           bash build-windows.bash
@@ -189,7 +190,6 @@ jobs:
       - name: Find Debian package
         id: find-deb
         run: |
-          export VERSION=$(git describe --always)
           DEB_FILE=$(find ./artifacts/geph-deb-oldubuntu -type f -name "*.deb" | head -n 1)
           echo "DEB_PATH=$DEB_FILE" >> $GITHUB_OUTPUT
           DEB_FILENAME=$(basename "$DEB_FILE")

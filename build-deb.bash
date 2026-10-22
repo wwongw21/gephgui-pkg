@@ -18,7 +18,9 @@ set -e
 cd "$(dirname "$(readlink -f "$0")")"
 REPO_ROOT="$PWD"
 
-export VERSION="${VERSION:-$(git describe --always)}"
+. ./build-common.bash
+resolve_build_versions "$REPO_ROOT"
+export VERSION PACKAGE_VERSION_DEB
 mkdir -p output
 # Drop stale deb artifacts so output/ only ever holds the latest per OS.
 rm -f output/*.deb
@@ -39,7 +41,10 @@ docker run --rm -i \
   -w /app \
   --network=host \
   -e VERSION \
-  ubuntu:22.04 bash -e << EOF
+  -e PACKAGE_VERSION_DEB \
+  -e USER_ID="$USER_ID" \
+  -e GROUP_ID="$GROUP_ID" \
+  ubuntu:22.04 bash -e << 'EOF'
     echo "Setting up build environment as root..."
     apt-get update
     apt-get install -y \
@@ -67,18 +72,18 @@ docker run --rm -i \
     # Add user to sudoers
     echo "builduser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/builduser
 
-    # Pass VERSION into the builduser's environment and run build
-    su - builduser -c "
+    # Preserve the validated source/package versions while dropping to the
+    # matching non-root build user.
+    su -p builduser -c '
+      export HOME=/home/builduser
+      export USER=builduser LOGNAME=builduser
       # Everything the build writes (staged sources, cargo target, rustup/cargo
       # homes, npm cache) lives on the persistent machine-local /cache mount.
       export GEPHGUI_PKG_BUILD_ROOT=/cache
       export CARGO_HOME=/cache/cargo
       export RUSTUP_HOME=/cache/rustup
       export npm_config_cache=/cache/npm
-      export PATH=/cache/cargo/bin:\$PATH
-
-      # Also explicitly export VERSION for use inside build-deb-inner.sh
-      export VERSION=\$(printenv VERSION)
+      export PATH=/cache/cargo/bin:$PATH
 
       cd /app
       # The repo (and its submodules) belong to the host user; git inside the
@@ -88,12 +93,12 @@ docker run --rm -i \
       # Install Rust (rustup) into the cached CARGO_HOME/RUSTUP_HOME, unless a
       # previous run already left it there.
       if ! command -v cargo >/dev/null 2>&1; then
-        curl --proto \"=https\" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+        curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
       fi
 
       # Now call the actual build script
       bash /app/debian/build-deb-inner.sh
-    "
+    '
 EOF
 
-echo ">> done: output/geph-linux-${VERSION#v}.deb"
+echo ">> done: output/geph-linux-${PACKAGE_VERSION_DEB}.deb"

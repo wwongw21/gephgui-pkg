@@ -15,9 +15,9 @@ set -euo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")"
 . ./build-common.bash
+resolve_build_versions "$PWD"
 
-VERSION="${VERSION:-$(git describe --always)}"
-ARTIFACT="output/geph-linux-${VERSION#v}.flatpak"
+ARTIFACT="output/geph-linux-${VERSION_ARTIFACT}.flatpak"
 mkdir -p output
 # Drop stale Flatpak artifacts so output/ only ever holds the latest per OS.
 rm -f output/geph-linux-*.flatpak

@@ -16,13 +16,12 @@ cd "$(dirname "$(readlink -f "$0")")/.."
 # staged into $LOCAL_SRC (under /cache, see build-deb.bash) and compiled there.
 . ./build-common.bash
 
-# Get version using git describe
 PACKAGE_NAME="gephgui-wry"
 ARCHITECTURE="amd64"
 MAINTAINER="Geph Team <contact@geph.io>"
 DEPENDS="libwebkit2gtk-4.1-0, libxdo3, nftables, iproute2, policykit-1"
-VERSION="${VERSION:-$(git describe --always)}"
-VERSION=${VERSION#v}
+resolve_build_versions "$PWD"
+validate_debian_version "$PACKAGE_VERSION_DEB"
 
 OUTPUT="output"
 mkdir -p "$OUTPUT"
@@ -40,7 +39,7 @@ mkdir -p "$WORK_DIR/usr/share/icons/hicolor/256x256/apps"
 # Create control file
 cat > "$WORK_DIR/DEBIAN/control" << EOF
 Package: $PACKAGE_NAME
-Version: $VERSION
+Version: $PACKAGE_VERSION_DEB
 Section: net
 Priority: optional
 Architecture: $ARCHITECTURE
@@ -125,9 +124,9 @@ chmod +x "$WORK_DIR/DEBIAN/prerm"
 # Build the package into a local temp file, then publish it into the shared
 # output/ via rename so other machines never sync a half-written .deb.
 echo "Building Debian package..."
-PACKAGE_FILE="$OUTPUT/geph-linux-${VERSION}.deb"
+PACKAGE_FILE="$OUTPUT/geph-linux-${PACKAGE_VERSION_DEB}.deb"
 dpkg-deb --build "$WORK_DIR" "$WORK_DIR.deb"
 publish "$WORK_DIR.deb" "$PACKAGE_FILE"
 rm -f "$WORK_DIR.deb"
 
-echo "Debian package built: $PACKAGE_FILE"
+echo "Debian package built: $PACKAGE_FILE (source version $VERSION)"

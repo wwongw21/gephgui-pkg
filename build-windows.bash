@@ -13,8 +13,9 @@ set -e
 cd "$(dirname "$(readlink -f "$0")")"
 . ./build-common.bash
 
-export VERSION="${VERSION:-$(git describe --always)}"
-ARTIFACT="output/geph-windows-${VERSION#v}.exe"
+resolve_build_versions "$PWD"
+validate_windows_version "$VERSION_NUM"
+ARTIFACT="output/geph-windows-${VERSION_ARTIFACT}.exe"
 
 OUTPUT="output"
 mkdir -p "$OUTPUT"
@@ -130,10 +131,8 @@ sign "$STAGE/geph5-client.exe"
 # bin/x86/wintun.dll over blobs/win-ia32/wintun.dll.
 
 # --- Compile the installer ---------------------------------------------------
-# VersionInfoVersion only accepts a numeric quad, but VERSION may look like
-# "v5.8.0" or "v5.8.0-13-gdeadbee" (git describe). Strip it down (see setup.iss).
-VNUM="${VERSION#v}"; VNUM="${VNUM%%[-+]*}"
-export VERSION_NUM="$VNUM.0"
+# VERSION_NUM is the validated numeric quad produced by build-common.bash.
+# VERSION remains the display identifier and retains the git revision/hash.
 (cd "$WIN/windows" && sh -c "./iscc/ISCC.exe setup.iss")
 sign "$WIN/windows/Output/geph-windows-setup.exe"
 publish "$WIN/windows/Output/geph-windows-setup.exe" "$ARTIFACT"

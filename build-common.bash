@@ -246,7 +246,8 @@ resolve_build_versions() {
     elif [[ "$dirty_check" != skip-dirty ]] && version_git "$repo_root" rev-parse --verify HEAD >/dev/null 2>&1; then
         # An explicit VERSION is a source/display identity, not permission to
         # label modified tracked sources as a clean release.
-        if ! version_git "$repo_root" diff-index --quiet HEAD --; then
+        # Use a content-aware comparison so stat-only changes stay clean.
+        if ! version_git "$repo_root" diff --quiet HEAD --; then
             [[ "$source_version" == *-dirty ]] || source_version+="-dirty"
         fi
     fi

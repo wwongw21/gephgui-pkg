@@ -88,7 +88,8 @@ docker run --rm -i \
       cd /app
       # The repo (and its submodules) belong to the host user; git inside the
       # container refuses to touch them without this.
-      git config --global --add safe.directory '*'
+      # Keep the wildcard double-quoted so it survives this outer su -c string.
+      git config --global --add safe.directory "*"
 
       # Install Rust (rustup) into the cached CARGO_HOME/RUSTUP_HOME, unless a
       # previous run already left it there.

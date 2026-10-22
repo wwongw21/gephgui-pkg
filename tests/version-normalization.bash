@@ -39,6 +39,65 @@ make_repo() {
     git -C "$path" commit -qm 'fixture base'
 }
 
+assert_deb_safe_directory_argument() {
+    local command_text capture_script capture_file git_command mock_bin mock_git glob_dir git_args_ok
+
+    command_text="$(awk -v endquote="    '" '
+        /^[[:space:]]*su -p builduser -c / { copying=1 }
+        copying { print }
+        copying && $0 == endquote { exit }
+    ' "$REPO_ROOT/build-deb.bash")"
+    [[ -n "$command_text" ]] || fail 'could not find the Debian build-user command'
+
+    capture_script="$TMP_ROOT/capture-deb-su-command.bash"
+    capture_file="$TMP_ROOT/deb-su-command.txt"
+    cat > "$capture_script" <<'CAPTURE_SU'
+#!/usr/bin/env bash
+set -euo pipefail
+su() {
+    [[ "$#" -eq 4 ]] || exit 70
+    [[ "$1" == -p && "$2" == builduser && "$3" == -c ]] || exit 71
+    printf '%s\n' "$4" > "$CAPTURE_SU_COMMAND"
+}
+CAPTURE_SU
+    printf '%s\n' "$command_text" >> "$capture_script"
+    CAPTURE_SU_COMMAND="$capture_file" "$BASH" "$capture_script" || fail 'could not capture the assembled su command'
+
+    git_command="$(sed -n '/git config --global --add safe.directory/p' "$capture_file")"
+    [[ -n "$git_command" ]] || fail 'captured su command has no safe.directory setup'
+    case "$git_command" in
+        *'safe.directory "*"') ;;
+        *) fail "outer su quoting removed the literal wildcard quotes: $git_command" ;;
+    esac
+
+    mock_bin="$TMP_ROOT/mock-bin"
+    mock_git="$mock_bin/git"
+    glob_dir="$TMP_ROOT/container-app"
+    git_args_ok="$TMP_ROOT/git-args-ok"
+    mkdir -p "$mock_bin" "$glob_dir"
+    : > "$glob_dir/app-file-a"
+    : > "$glob_dir/app-file-b"
+    cat > "$mock_git" <<'MOCK_GIT'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$#" -ne 5 || "$1" != config || "$2" != --global || "$3" != --add || "$4" != safe.directory || "$5" != '*' ]]; then
+    printf 'git received %s arguments: <%s>\n' "$#" "$*" >&2
+    exit 1
+fi
+: > "$GIT_ARGS_OK"
+MOCK_GIT
+    chmod +x "$mock_git"
+    (
+        cd "$glob_dir"
+        export PATH="$mock_bin:$PATH"
+        export GIT_ARGS_OK="$git_args_ok"
+        "$BASH" -c "$git_command"
+    ) || fail 'safe.directory did not reach git as a name and literal wildcard value'
+    [[ -f "$git_args_ok" ]] || fail 'mock git did not confirm the safe.directory arguments'
+}
+
+assert_deb_safe_directory_argument
+
 repo="$TMP_ROOT/untagged"
 make_repo "$repo"
 unset VERSION || true
@@ -116,6 +175,42 @@ for tag_kind in annotated lightweight; do
     assert_eq "$tag_kind dirty marker" "v2.4.6-3-g$short_sha-dirty" "$VERSION"
     [[ "$PACKAGE_VERSION_DEB" == "2.4.6+git.3.g$short_sha.dirty" ]] || fail "$tag_kind dirty Debian version '$PACKAGE_VERSION_DEB'"
 done
+
+timestamp_repo="$TMP_ROOT/timestamp-only"
+make_repo "$timestamp_repo"
+git -C "$timestamp_repo" tag v4.2.1
+touch -t 203001010000.00 "$timestamp_repo/source.txt"
+VERSION='v4.2.1'
+resolve_build_versions "$timestamp_repo" || fail 'timestamp-only explicit version failed'
+assert_eq 'timestamp-only explicit version stays clean' 'v4.2.1' "$VERSION"
+assert_eq 'timestamp-only explicit package stays clean' '4.2.1' "$PACKAGE_VERSION_DEB"
+unset VERSION || true
+resolve_build_versions "$timestamp_repo" || fail 'timestamp-only automatic version failed'
+assert_eq 'timestamp-only automatic version stays clean' 'v4.2.1' "$VERSION"
+assert_eq 'timestamp-only automatic package stays clean' '4.2.1' "$PACKAGE_VERSION_DEB"
+
+printf 'staged change\n' >> "$timestamp_repo/source.txt"
+git -C "$timestamp_repo" add source.txt
+VERSION='v4.2.1'
+resolve_build_versions "$timestamp_repo" || fail 'staged explicit dirty version failed'
+staged_explicit_version="$VERSION"
+staged_explicit_package="$PACKAGE_VERSION_DEB"
+assert_eq 'staged explicit change marks version dirty' 'v4.2.1-dirty' "$staged_explicit_version"
+unset VERSION || true
+resolve_build_versions "$timestamp_repo" || fail 'staged automatic dirty version failed'
+assert_eq 'staged automatic version matches explicit identity' "$staged_explicit_version" "$VERSION"
+assert_eq 'staged automatic package matches explicit identity' "$staged_explicit_package" "$PACKAGE_VERSION_DEB"
+
+printf 'unstaged change\n' >> "$timestamp_repo/source.txt"
+VERSION='v4.2.1'
+resolve_build_versions "$timestamp_repo" || fail 'unstaged explicit dirty version failed'
+unstaged_explicit_version="$VERSION"
+unstaged_explicit_package="$PACKAGE_VERSION_DEB"
+assert_eq 'unstaged explicit change marks version dirty' 'v4.2.1-dirty' "$unstaged_explicit_version"
+unset VERSION || true
+resolve_build_versions "$timestamp_repo" || fail 'unstaged automatic dirty version failed'
+assert_eq 'unstaged automatic version matches explicit identity' "$unstaged_explicit_version" "$VERSION"
+assert_eq 'unstaged automatic package matches explicit identity' "$unstaged_explicit_package" "$PACKAGE_VERSION_DEB"
 
 partial_repo="$TMP_ROOT/partial-repo"
 make_repo "$partial_repo"

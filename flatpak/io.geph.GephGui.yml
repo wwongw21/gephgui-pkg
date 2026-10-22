@@ -49,7 +49,7 @@ modules:
     build-commands:
       - |
         if [ -d .pkg-git ]; then
-          VERSION_GIT_DIR=.pkg-git bash -c '. ./build-common.bash; resolve_build_versions "$PWD" skip-dirty; printf "%s" "$VERSION" > .version'
+          VERSION_GIT_DIR=.pkg-git bash -e -c '. ./build-common.bash; resolve_build_versions "$PWD" skip-dirty; printf "%s" "$VERSION" > .version'
         elif [ -z "${VERSION:-}" ]; then
           printf "dev" > .version
         else

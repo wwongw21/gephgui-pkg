@@ -406,14 +406,46 @@ hmo_restore_install_transaction() {
         }
     done
     HMO_OLD_SERVICE_STATE="$(cat "$HMO_RECOVER_TXN/geph-manager.service.state")" || return 1
-    if [ "$HMO_OLD_SERVICE_STATE" = absent ] && { [ -e "$HMO_RECOVER_SERVICE" ] || [ -L "$HMO_RECOVER_SERVICE" ]; }; then
-        if [ -x "$HMO_RECOVER_BINDIR/geph5" ]; then
+    if [ "$HMO_OLD_SERVICE_STATE" = absent ]; then
+        HMO_RECOVER_SERVICE_EXISTS=0
+        if [ -e "$HMO_RECOVER_SERVICE" ] || [ -L "$HMO_RECOVER_SERVICE" ]; then
+            HMO_RECOVER_SERVICE_EXISTS=1
+        fi
+        HMO_RECOVER_MANAGER_ACTIVE=0
+        if "$HMO_RECOVER_SYSTEMCTL" is-active --quiet geph-manager.service; then
+            HMO_RECOVER_MANAGER_ACTIVE=1
+        else
+            HMO_RECOVER_ACTIVE_STATUS=$?
+            case "$HMO_RECOVER_ACTIVE_STATUS" in
+                3|4) : ;;
+                *) hmo_error 'could not verify the partially installed manager is stopped; install journal retained'; return 1 ;;
+            esac
+        fi
+        if [ "$HMO_RECOVER_SERVICE_EXISTS" -eq 1 ] || [ "$HMO_RECOVER_MANAGER_ACTIVE" -eq 1 ]; then
+            [ -x "$HMO_RECOVER_BINDIR/geph5" ] || {
+                hmo_error 'cannot stop the partially installed manager without its executable; install journal retained'
+                return 1
+            }
             "$HMO_RECOVER_BINDIR/geph5" unregister-manager || {
                 if [ -e "$HMO_RECOVER_SERVICE" ] || [ -L "$HMO_RECOVER_SERVICE" ]; then
                     hmo_error 'could not stop a partially registered manager; install journal retained'
                     return 1
                 fi
             }
+            if [ -e "$HMO_RECOVER_SERVICE" ] || [ -L "$HMO_RECOVER_SERVICE" ]; then
+                hmo_error 'partially registered manager unit remains; install journal retained'
+                return 1
+            fi
+            if "$HMO_RECOVER_SYSTEMCTL" is-active --quiet geph-manager.service; then
+                hmo_error 'partially installed manager remains active; install journal retained'
+                return 1
+            else
+                HMO_RECOVER_ACTIVE_STATUS=$?
+                case "$HMO_RECOVER_ACTIVE_STATUS" in
+                    3|4) : ;;
+                    *) hmo_error 'could not verify the partially installed manager stopped; install journal retained'; return 1 ;;
+                esac
+            fi
         fi
     fi
     hmo_restore_install_file "$HMO_RECOVER_TXN" geph5 "$HMO_RECOVER_BINDIR/geph5" || return 1
@@ -427,21 +459,21 @@ hmo_restore_install_transaction() {
     if [ "$HMO_OLD_SERVICE_STATE" = present ] && [ -x "$HMO_RECOVER_BINDIR/geph5" ]; then
         "$HMO_RECOVER_BINDIR/geph5" register-manager || { hmo_error 'could not restart the prior manager; install journal retained'; return 1; }
         hmo_restore_install_file "$HMO_RECOVER_TXN" geph-manager.service "$HMO_RECOVER_SERVICE" || return 1
-    elif [ "$HMO_OLD_SERVICE_STATE" = absent ]; then
-        if "$HMO_RECOVER_SYSTEMCTL" is-active --quiet geph-manager.service; then
-            hmo_error 'partially installed manager remains active; install journal retained'
-            return 1
-        else
-            HMO_RECOVER_ACTIVE_STATUS=$?
-            case "$HMO_RECOVER_ACTIVE_STATUS" in
-                3|4) : ;;
-                *) hmo_error 'could not verify the partially installed manager stopped'; return 1 ;;
-            esac
-        fi
     fi
     "$HMO_RECOVER_SYSTEMCTL" daemon-reload || { hmo_error 'could not reload systemd after transaction recovery'; return 1; }
-    hmo_clear_install_transaction "$HMO_RECOVER_TXN"
+    [ ! -e "$HMO_RECOVER_COMMITTED" ] && [ ! -L "$HMO_RECOVER_COMMITTED" ] || {
+        hmo_error 'a settled install journal already exists; manager recovery is retained'
+        return 1
+    }
+    mv "$HMO_RECOVER_TXN" "$HMO_RECOVER_COMMITTED" || {
+        hmo_error 'could not retire the recovered install journal; snapshots are retained'
+        return 1
+    }
     HMO_INSTALL_TXN_ACTIVE=0
+    hmo_clear_install_transaction "$HMO_RECOVER_COMMITTED" || {
+        hmo_error 'manager recovery is complete but its settled journal still needs cleanup'
+        return 1
+    }
     printf 'Recovered the previous Geph host-manager installation state.\n' >&2
 }
 
@@ -535,8 +567,20 @@ hmo_cleanup_owned_manager() {
         esac
     fi
     "$HMO_CLEAN_SYSTEMCTL" daemon-reload || { hmo_error 'systemd reload failed; retry the explicit uninstall'; return 1; }
-    [ "$HMO_GEPh5_PRESENT" -eq 0 ] || rm -f "$HMO_CLEAN_BINDIR/geph5"
-    [ "$HMO_CLIENT_PRESENT" -eq 0 ] || rm -f "$HMO_CLEAN_BINDIR/geph5-client"
+    if [ "$HMO_GEPh5_PRESENT" -eq 1 ]; then
+        rm -f "$HMO_CLEAN_BINDIR/geph5" || { hmo_error 'could not remove the manager executable; ownership record retained for retry'; return 1; }
+        if [ -e "$HMO_CLEAN_BINDIR/geph5" ] || [ -L "$HMO_CLEAN_BINDIR/geph5" ]; then
+            hmo_error 'manager executable remains after removal; ownership record retained for retry'
+            return 1
+        fi
+    fi
+    if [ "$HMO_CLIENT_PRESENT" -eq 1 ]; then
+        rm -f "$HMO_CLEAN_BINDIR/geph5-client" || { hmo_error 'could not remove the engine executable; ownership record retained for retry'; return 1; }
+        if [ -e "$HMO_CLEAN_BINDIR/geph5-client" ] || [ -L "$HMO_CLEAN_BINDIR/geph5-client" ]; then
+            hmo_error 'engine executable remains after removal; ownership record retained for retry'
+            return 1
+        fi
+    fi
     rm -f "$HMO_CLEAN_RECORD" || { hmo_error 'could not remove ownership record'; return 1; }
     rmdir "$HMO_CLEAN_STATE_DIR" 2>/dev/null || true
     printf 'Geph host manager removed for the final owner.\n'

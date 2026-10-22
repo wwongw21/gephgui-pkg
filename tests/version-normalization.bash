@@ -295,4 +295,38 @@ if validate_windows_version "$VERSION_NUM" >/dev/null 2>&1; then
     fail 'Windows accepted a version component above 65535'
 fi
 
+# Execute the nested command from the actual Flatpak manifest. A rejected
+# version must not return success or replace an earlier .version file.
+flatpak_manifest_command="$(awk '/VERSION_GIT_DIR=.pkg-git bash / { sub(/^[[:space:]]*/, ""); print; exit }' \
+    "$REPO_ROOT/flatpak/io.geph.GephGui.yml")"
+[[ -n "$flatpak_manifest_command" ]] || fail 'could not find the Flatpak manifest version command'
+run_flatpak_manifest_version() {
+    local root="$1" version="$2"
+    (
+        cd "$root"
+        VERSION="$version" bash -c "$flatpak_manifest_command"
+    )
+}
+
+flatpak_version_common="$TMP_ROOT/flatpak-version-common.bash"
+cp "$REPO_ROOT/build-common.bash" "$flatpak_version_common"
+flatpak_existing="$TMP_ROOT/flatpak-version-existing"
+mkdir -p "$flatpak_existing/.pkg-git"
+cp "$flatpak_version_common" "$flatpak_existing/build-common.bash"
+printf '%s' 'last-good' > "$flatpak_existing/.version"
+if run_flatpak_manifest_version "$flatpak_existing" not-a-version > "$TMP_ROOT/flatpak-invalid-existing.log" 2>&1; then
+    fail 'Flatpak manifest accepted an invalid version'
+fi
+assert_eq 'invalid Flatpak version keeps prior .version' 'last-good' "$(cat "$flatpak_existing/.version")"
+
+flatpak_missing="$TMP_ROOT/flatpak-version-missing"
+mkdir -p "$flatpak_missing/.pkg-git"
+cp "$flatpak_version_common" "$flatpak_missing/build-common.bash"
+if run_flatpak_manifest_version "$flatpak_missing" not-a-version > "$TMP_ROOT/flatpak-invalid-missing.log" 2>&1; then
+    fail 'Flatpak manifest accepted an invalid version without a prior .version'
+fi
+[[ ! -e "$flatpak_missing/.version" ]] || fail 'invalid Flatpak version created .version'
+run_flatpak_manifest_version "$flatpak_missing" v2.3.4 || fail 'Flatpak manifest rejected a valid release version'
+assert_eq 'valid Flatpak manifest version' 'v2.3.4' "$(cat "$flatpak_missing/.version")"
+
 printf 'PASS: version normalization fixtures\n'

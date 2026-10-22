@@ -156,6 +156,32 @@ EOF
 #!/bin/sh
 exit 0
 EOF
+    cat > "$root/stubs/rm" <<'EOF'
+#!/bin/sh
+manager=0
+client=0
+for path do
+    [ "$path" != "$HMO_FIXTURE_ROOT/usr/local/bin/geph5" ] || manager=1
+    [ "$path" != "$HMO_FIXTURE_ROOT/usr/local/bin/geph5-client" ] || client=1
+done
+case "${FAIL_REMOVE_AT:-}" in
+    geph5|both)
+        if [ "$manager" -eq 1 ] && [ ! -e "$FAIL_REMOVE_MANAGER_MARKER" ]; then
+            : > "$FAIL_REMOVE_MANAGER_MARKER"
+            exit 81
+        fi
+        ;;
+esac
+case "${FAIL_REMOVE_AT:-}" in
+    geph5-client|both)
+        if [ "$client" -eq 1 ] && [ ! -e "$FAIL_REMOVE_CLIENT_MARKER" ]; then
+            : > "$FAIL_REMOVE_CLIENT_MARKER"
+            exit 82
+        fi
+        ;;
+esac
+exec /bin/rm "$@"
+EOF
     cat > "$root/stubs/systemctl" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "$SYSTEMCTL_LOG"
@@ -224,6 +250,8 @@ configure_fixture_env() {
     export FLATPAK_LOG="$root/flatpak-spawn.log"
     export ZENITY_LOG="$root/zenity.log"
     export FAIL_MARKER="$root/fail-once.marker"
+    export FAIL_REMOVE_MANAGER_MARKER="$root/remove-manager-once.marker"
+    export FAIL_REMOVE_CLIENT_MARKER="$root/remove-client-once.marker"
 }
 
 fixture_env() {
@@ -346,6 +374,144 @@ EOF
     hmo_clear_install_transaction "$crash/state/install-transaction" || fail 'post-crash retry journal did not clear'
     grep -Fxq 'prior manager' "$crash/bin/geph5" || fail 'pre-active recovery changed the prior manager'
 
+    mkdir -p "$root/recovery/state" "$root/recovery/bin"
+    local recovery="$root/recovery"
+    printf 'prior manager\n' > "$recovery/bin/geph5"
+    printf 'prior engine\n' > "$recovery/bin/geph5-client"
+    hmo_begin_install_transaction "$recovery/state" "$recovery/bin" "$recovery/service" \
+        "$recovery/legacy-service" "$recovery/legacy-timer" "$recovery/legacy-watchdog" || fail 'could not create cleanup-failure journal'
+    printf 'interrupted manager\n' > "$recovery/bin/geph5"
+    printf 'interrupted engine\n' > "$recovery/bin/geph5-client"
+    cat > "$recovery/systemctl" <<'EOF'
+#!/bin/sh
+[ "$1" != is-active ] || exit 3
+exit 0
+EOF
+    chmod 0755 "$recovery/systemctl"
+    local fail_rm_txn="$recovery/state/install-transaction/backup/geph5-client"
+    local fail_rm_committed="$recovery/state/install-committed/backup/geph5-client"
+    rm() {
+        local path
+        for path do
+            if [ "$path" = "$fail_rm_txn" ] || [ "$path" = "$fail_rm_committed" ]; then return 1; fi
+        done
+        command rm "$@"
+    }
+    if hmo_restore_install_transaction "$recovery/state" "$recovery/bin" "$recovery/service" "$recovery/systemctl" \
+        "$recovery/legacy-service" "$recovery/legacy-timer" "$recovery/legacy-watchdog"; then
+        fail 'active recovery reported success after snapshot cleanup failed'
+    fi
+    unset -f rm
+    assert_absent "$recovery/state/install-transaction"
+    assert_exists "$recovery/state/install-committed"
+    assert_absent "$recovery/state/install-committed/backup/geph5"
+    assert_exists "$recovery/state/install-committed/backup/geph5-client"
+    grep -Fxq 'prior manager' "$recovery/bin/geph5" || fail 'cleanup failure left the interrupted manager installed'
+    grep -Fxq 'prior engine' "$recovery/bin/geph5-client" || fail 'cleanup failure left the interrupted engine installed'
+    hmo_restore_install_transaction "$recovery/state" "$recovery/bin" "$recovery/service" "$recovery/systemctl" \
+        "$recovery/legacy-service" "$recovery/legacy-timer" "$recovery/legacy-watchdog" || fail 'settled recovery journal did not retry cleanup'
+    assert_absent "$recovery/state/install-committed"
+    hmo_begin_install_transaction "$recovery/state" "$recovery/bin" "$recovery/service" \
+        "$recovery/legacy-service" "$recovery/legacy-timer" "$recovery/legacy-watchdog" || fail 'install retry failed after settled recovery cleanup'
+    hmo_clear_install_transaction "$recovery/state/install-transaction" || fail 'retry journal after settled recovery did not clear'
+
+    mkdir -p "$root/recovery-cleanup-crash/state" "$root/recovery-cleanup-crash/bin" "$root/recovery-cleanup-crash/stubs"
+    local cleanup_crash="$root/recovery-cleanup-crash"
+    printf 'prior manager\n' > "$cleanup_crash/bin/geph5"
+    printf 'prior engine\n' > "$cleanup_crash/bin/geph5-client"
+    hmo_begin_install_transaction "$cleanup_crash/state" "$cleanup_crash/bin" "$cleanup_crash/service" \
+        "$cleanup_crash/legacy-service" "$cleanup_crash/legacy-timer" "$cleanup_crash/legacy-watchdog" || fail 'could not create recovery-interruption journal'
+    printf 'interrupted manager\n' > "$cleanup_crash/bin/geph5"
+    printf 'interrupted engine\n' > "$cleanup_crash/bin/geph5-client"
+    cp "$recovery/systemctl" "$cleanup_crash/systemctl"
+    cat > "$cleanup_crash/stubs/rm" <<'EOF'
+#!/bin/sh
+for path do
+    if [ "$path" = "$HMO_RECOVER_RM_TARGET" ]; then
+        /bin/rm "$@"
+        kill -KILL "$PPID"
+        exit 99
+    fi
+done
+exec /bin/rm "$@"
+EOF
+    cat > "$cleanup_crash/recover.sh" <<'EOF'
+#!/bin/sh
+set -eu
+HMO_LIBRARY_ONLY=1
+. "$HMO_HELPER"
+unset HMO_LIBRARY_ONLY
+hmo_require_root_owned() { return 0; }
+chown() { return 0; }
+hmo_restore_install_transaction "$HMO_STATE" "$HMO_BINDIR" "$HMO_SERVICE" "$HMO_SYSTEMCTL" \
+    "$HMO_LEGACY_SERVICE" "$HMO_LEGACY_TIMER" "$HMO_LEGACY_WATCHDOG" || exit 1
+EOF
+    chmod 0755 "$cleanup_crash/stubs/rm" "$cleanup_crash/recover.sh"
+    if HMO_HELPER="$REPO_ROOT/flatpak/geph-flatpak-watchdog.sh" \
+        HMO_STATE="$cleanup_crash/state" HMO_BINDIR="$cleanup_crash/bin" HMO_SERVICE="$cleanup_crash/service" \
+        HMO_SYSTEMCTL="$cleanup_crash/systemctl" HMO_LEGACY_SERVICE="$cleanup_crash/legacy-service" \
+        HMO_LEGACY_TIMER="$cleanup_crash/legacy-timer" HMO_LEGACY_WATCHDOG="$cleanup_crash/legacy-watchdog" \
+        HMO_RECOVER_RM_TARGET="$cleanup_crash/state/install-committed/backup/geph5" \
+        PATH="$cleanup_crash/stubs:$PATH" /bin/sh "$cleanup_crash/recover.sh"; then
+        fail 'recovery cleanup interruption did not stop its process'
+    fi
+    assert_absent "$cleanup_crash/state/install-transaction"
+    assert_exists "$cleanup_crash/state/install-committed"
+    assert_absent "$cleanup_crash/state/install-committed/backup/geph5"
+    assert_exists "$cleanup_crash/state/install-committed/backup/geph5-client"
+    grep -Fxq 'prior manager' "$cleanup_crash/bin/geph5" || fail 'interrupted recovery changed the prior manager'
+    hmo_restore_install_transaction "$cleanup_crash/state" "$cleanup_crash/bin" "$cleanup_crash/service" "$cleanup_crash/systemctl" \
+        "$cleanup_crash/legacy-service" "$cleanup_crash/legacy-timer" "$cleanup_crash/legacy-watchdog" || fail 'committed recovery retry did not clean remaining snapshots'
+    assert_absent "$cleanup_crash/state/install-committed"
+    hmo_begin_install_transaction "$cleanup_crash/state" "$cleanup_crash/bin" "$cleanup_crash/service" \
+        "$cleanup_crash/legacy-service" "$cleanup_crash/legacy-timer" "$cleanup_crash/legacy-watchdog" || fail 'retry failed after interrupted recovery cleanup'
+    hmo_clear_install_transaction "$cleanup_crash/state/install-transaction" || fail 'retry journal after interrupted recovery did not clear'
+
+    mkdir -p "$root/partial-manager/state" "$root/partial-manager/bin"
+    local partial_manager="$root/partial-manager"
+    hmo_begin_install_transaction "$partial_manager/state" "$partial_manager/bin" "$partial_manager/service" \
+        "$partial_manager/legacy-service" "$partial_manager/legacy-timer" "$partial_manager/legacy-watchdog" || fail 'could not create partial-manager journal'
+    cat > "$partial_manager/bin/geph5" <<'EOF'
+#!/bin/sh
+if [ "$1" = unregister-manager ]; then
+    /bin/rm -f "$SERVICE_PATH"
+    if [ -e "$STOP_ALLOWED" ]; then
+        : > "$STOPPED_MARKER"
+        exit 0
+    fi
+    exit 1
+fi
+exit 0
+EOF
+    chmod 0755 "$partial_manager/bin/geph5"
+    printf 'interrupted engine\n' > "$partial_manager/bin/geph5-client"
+    printf 'ExecStart=%s/geph5 manager\n' "$partial_manager/bin" > "$partial_manager/service"
+    cat > "$partial_manager/systemctl" <<'EOF'
+#!/bin/sh
+case "$1" in
+    is-active) [ -e "$STOPPED_MARKER" ] && exit 3 || exit 0 ;;
+    *) exit 0 ;;
+esac
+EOF
+    chmod 0755 "$partial_manager/systemctl"
+    export SERVICE_PATH="$partial_manager/service"
+    export STOP_ALLOWED="$partial_manager/stop-allowed"
+    export STOPPED_MARKER="$partial_manager/stopped"
+    if hmo_restore_install_transaction "$partial_manager/state" "$partial_manager/bin" "$partial_manager/service" "$partial_manager/systemctl" \
+        "$partial_manager/legacy-service" "$partial_manager/legacy-timer" "$partial_manager/legacy-watchdog"; then
+        fail 'rollback completed while the partially installed manager was still active'
+    fi
+    assert_absent "$partial_manager/service"
+    assert_exists "$partial_manager/bin/geph5"
+    assert_exists "$partial_manager/bin/geph5-client"
+    assert_exists "$partial_manager/state/install-transaction/active"
+    : > "$STOP_ALLOWED"
+    hmo_restore_install_transaction "$partial_manager/state" "$partial_manager/bin" "$partial_manager/service" "$partial_manager/systemctl" \
+        "$partial_manager/legacy-service" "$partial_manager/legacy-timer" "$partial_manager/legacy-watchdog" || fail 'rollback retry could not stop a unitless active manager'
+    assert_absent "$partial_manager/bin/geph5"
+    assert_absent "$partial_manager/bin/geph5-client"
+    assert_absent "$partial_manager/state/install-transaction"
+
     mkdir -p "$foreign/state/install-transaction/backup"
     printf 'foreign data\n' > "$foreign/state/install-transaction/backup/keep-me"
     if hmo_restore_install_transaction "$foreign/state" "$foreign/bin" "$foreign/service" /bin/true \
@@ -369,6 +535,36 @@ grep -Fq 'util-linux flock command is required' "$no_flock/missing-flock.log" ||
 assert_absent "$no_flock/usr/local/bin"
 assert_absent "$no_flock/etc/systemd/system"
 assert_absent "$no_flock/var/lib/geph-flatpak"
+
+for failpoint in geph5 geph5-client both; do
+    removal="$(make_root "remove-failure-$failpoint")"
+    run_installer "$removal" > "$removal/installer-output.log" 2>&1 || fail "initial manager install failed for $failpoint removal test"
+    if FAIL_REMOVE_AT="$failpoint" run_uninstaller_all "$removal" > "$removal/remove-first.log" 2>&1; then
+        fail "production uninstaller reported success after $failpoint removal failed"
+    fi
+    grep -Fxq 'state=uninstalling' "$removal/var/lib/geph-flatpak/manager.identity" || fail "identity was not retained after $failpoint removal failure"
+    assert_exists "$removal/usr/local/bin/geph-flatpak-uninstall"
+    if [[ "$failpoint" == geph5-client ]]; then
+        assert_absent "$removal/usr/local/bin/geph5"
+        assert_exists "$removal/usr/local/bin/geph5-client"
+    else
+        assert_exists "$removal/usr/local/bin/geph5"
+        assert_exists "$removal/usr/local/bin/geph5-client"
+    fi
+    if [[ "$failpoint" == both ]]; then
+        if FAIL_REMOVE_AT=both run_uninstaller_all "$removal" > "$removal/remove-second.log" 2>&1; then
+            fail 'production uninstaller reported success after the second binary removal failed'
+        fi
+        grep -Fxq 'state=uninstalling' "$removal/var/lib/geph-flatpak/manager.identity" || fail 'identity was lost after the second binary removal failure'
+        assert_absent "$removal/usr/local/bin/geph5"
+        assert_exists "$removal/usr/local/bin/geph5-client"
+    fi
+    unset FAIL_REMOVE_AT
+    run_uninstaller_all "$removal" > "$removal/remove-retry.log" 2>&1 || { cat "$removal/remove-retry.log"; fail "uninstall retry failed after $failpoint removal failure"; }
+    assert_absent "$removal/usr/local/bin/geph5"
+    assert_absent "$removal/usr/local/bin/geph5-client"
+    assert_absent "$removal/var/lib/geph-flatpak/manager.identity"
+done
 
 prepare_legacy_fixture() {
     local root="$1"

@@ -1,0 +1,710 @@
+{
+  "repository": "wwongw21/gephgui-pkg",
+  "branch": "master",
+  "sha": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+  "coverage": "All owned build scripts, Windows Inno installer, Debian maintainer scripts, macOS installer/uninstaller, Flatpak manifest/host installer/watchdog, CI workflow and submodule declarations reviewed. Vendored binary blobs were not reverse engineered; gitlink dependency source trees were not fetched.",
+  "findings": [
+    {
+      "id": "VPN-1",
+      "severity": "High",
+      "classification": "Confirmed for Debian; strongly supported for Windows",
+      "category": "Act on",
+      "title": "The current untagged checkout generates invalid native package versions",
+      "file": "debian/build-deb-inner.sh",
+      "lines": [
+        24,
+        25,
+        43
+      ],
+      "related_locations": [
+        {
+          "file": "build-deb.bash",
+          "lines": [
+            21
+          ]
+        },
+        {
+          "file": "build-windows.bash",
+          "lines": [
+            16,
+            135,
+            136
+          ]
+        },
+        {
+          "file": "windows/setup.iss",
+          "lines": [
+            19,
+            23
+          ]
+        },
+        {
+          "file": ".github/workflows/build.yaml",
+          "lines": [
+            119,
+            120,
+            171,
+            174
+          ]
+        }
+      ],
+      "evidence": "The repository has zero remote tags (git ls-remote --tags origin). At the reviewed HEAD git describe --always returns f3a248b. The Debian build removes only an optional leading v, then writes f3a248b into DEBIAN/control Version. A local minimal control fixture with that exact value fails dpkg-deb --build with exit 2: 'Version field value f3a248b: version number does not start with digit'. The Windows path computes VERSION_NUM=f3a248b.0 and passes it to Inno Setup VersionInfoVersion, which accepts only a numeric quad (also acknowledged by the script comments).",
+      "impact": "Current default-branch Debian builds cannot produce an installable package; Windows installer compilation also receives an invalid version. CI explicitly runs these paths for master pushes/PRs.",
+      "recommendation": "Separate semantic/numeric package version from the git display identifier. Supply a validated release version and valid untagged development fallback, such as Debian 0.0.0+git.<sha> and Windows 0.0.0.0; retain the SHA in display/build metadata. Add cheap package-version checks before compiling.",
+      "validation": "Confirmed with git describe, remote tag enumeration, and an actual dpkg-deb fixture build (exit 2). Full native builds were not run; Windows Inno compilation was not available. Regression validation should cover an untagged checkout, an annotated release tag, a lightweight release tag, and commits after a release tag.",
+      "disposition": "Act on",
+      "source_sha": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+      "source_url": "https://github.com/wwongw21/gephgui-pkg/blob/f3a248b2aefe31158ebd1d1ecae1f689e604fdfe/debian/build-deb-inner.sh#L24"
+    },
+    {
+      "id": "VPN-2",
+      "severity": "Medium",
+      "classification": "Strongly supported by actual watchdog execution and Flatpak's documented deletion semantics",
+      "category": "Act on",
+      "title": "Ordinary Flatpak removal leaves the privileged host manager installed indefinitely",
+      "file": "flatpak/geph-flatpak-watchdog.sh",
+      "lines": [
+        13,
+        17
+      ],
+      "related_locations": [
+        {
+          "file": "flatpak/install-host-manager.sh",
+          "lines": [
+            22,
+            29,
+            31,
+            39
+          ]
+        },
+        {
+          "file": "flatpak/geph-cleanup.timer",
+          "lines": [
+            5,
+            6
+          ]
+        },
+        {
+          "file": "flatpak/geph-cleanup.service",
+          "lines": [
+            7
+          ]
+        }
+      ],
+      "evidence": "The watchdog equates the existence of ~/.var/app/io.geph.GephGui with continued installation and exits at line 17. Flatpak retains application data during ordinary uninstall; deleting it is the separate --delete-data option. The current upstream command documentation states this option removes app data in ~/.var/app (flatpak/flatpak doc/flatpak-uninstall.xml, file blob cc29c049667b6369ba2a8a429facbdd2ed0fec62). An actual safe invocation of the unchanged watchdog with an existing retained data directory and no installed binaries returns 0 immediately, without attempting unregister-manager.",
+      "impact": "After a normal flatpak uninstall, the privileged Geph manager/service, engine binaries and cleanup timer remain installed and potentially running. The advertised automatic uninstall cleanup never occurs unless the user separately deletes app data.",
+      "recommendation": "Determine actual app installation state across the relevant user/system Flatpak installations, retaining manager ownership for other users, or provide an explicit supported host-manager uninstall action. Do not use app-data presence as the install-state signal.",
+      "validation": "Executed the current watchdog safely against a temporary existing app-data directory, confirming immediate successful no-op. Consulted current Flatpak source documentation and option declaration. A full flatpak install/uninstall cycle and privileged service removal were not run. Regression validation should exercise both normal uninstall and --delete-data, with multiple-user ownership considered.",
+      "disposition": "Act on",
+      "source_sha": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+      "source_url": "https://github.com/wwongw21/gephgui-pkg/blob/f3a248b2aefe31158ebd1d1ecae1f689e604fdfe/flatpak/geph-flatpak-watchdog.sh#L13"
+    }
+  ],
+  "tests": [
+    {
+      "command": "bash -n build-common.bash build-windows.bash build-macos.bash build-deb.bash debian/build-deb-inner.sh build-flatpak.bash macos/pkg-scripts/preinstall macos/pkg-scripts/postinstall macos/uninstall.sh",
+      "result": "PASS"
+    },
+    {
+      "command": "git describe --always; git ls-remote --tags origin",
+      "result": "f3a248b; zero remote tags"
+    },
+    {
+      "command": "dpkg-deb --build on an isolated minimal package with Version=f3a248b",
+      "result": "EXPECTED FAILURE: exit 2, version does not start with digit"
+    },
+    {
+      "command": "/bin/sh flatpak/geph-flatpak-watchdog.sh <existing-temp-data-dir> <absent-temp-bindir>",
+      "result": "Exit 0, no unregister attempt"
+    },
+    {
+      "command": "bash docs/reviews/2026-10-22/check-bash-syntax.sh docs/reviews/2026-10-22/bash-syntax-check.log",
+      "result": "PASS: 12 scripts checked in 12 individual bash -n processes; all exit codes were 0.",
+      "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+      "bash_version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-cygwin)",
+      "runner": "docs/reviews/2026-10-22/check-bash-syntax.sh",
+      "log": "docs/reviews/2026-10-22/bash-syntax-check.log",
+      "script_results": [
+        {
+          "path": "build-common.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "0e489d0b02a7fadbe49f71822ca74280f874f0ab",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "build-windows.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "92bf618be3bb6b2526559d1c689f1d172bac620c",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "build-macos.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "1c99b55465fa1dae85dbcaf20610ec300332870c",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "build-deb.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "de2e9508b41bf5c978615fd89407854410c0e5e7",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "debian/build-deb-inner.sh",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "2150a2022038733cbe68fadff3f55f7b175897fc",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "build-flatpak.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "b1b27cbf0aaeecb1c29154f8e655c8b81b570d37",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "flatpak/install-host-manager.sh",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "d375cd28d3c070d6c53747b80aaec16418a9e5af",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "flatpak/geph-flatpak-watchdog.sh",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "db874ad1937eda83cd0940f2bc12fad4ae38e988",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "macos/create-dmg",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "30646249b72365390d43c5fae8d0f1a22d79ef14",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "macos/pkg-scripts/preinstall",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "a8d66f03410fc7760acbd472dea2a83d9fc38017",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "macos/pkg-scripts/postinstall",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "a8f72a47ddab100b65ba11d3a4f8560fcd132795",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "macos/uninstall.sh",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "f8a88860cd740360c9690bf5631c687e2cf2d93f",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        }
+      ],
+      "scope_limit": "Syntax parsing only. These commands did not execute the scripts, build packages, or test installation and removal behavior."
+    },
+    {
+      "command": "git -c core.autocrlf=true check-attr text eol -- docs/reviews/2026-10-22/check-bash-syntax.sh docs/reviews/2026-10-22/bash-syntax-check.log docs/reviews/2026-10-22/bash-syntax-check.sha256",
+      "result": "PASS: all three files report text=set and eol=lf.",
+      "files": [
+        "docs/reviews/2026-10-22/check-bash-syntax.sh",
+        "docs/reviews/2026-10-22/bash-syntax-check.log",
+        "docs/reviews/2026-10-22/bash-syntax-check.sha256"
+      ]
+    }
+  ],
+  "limitations": [
+    "Full Windows/macOS/Debian/Flatpak packages not built.",
+    "Gitlink dependencies geph5, gephgui-wry and shared-modules were not populated or reviewed; packaging-layer source only.",
+    "Native installation, upgrade, service registration, network restoration and privileged uninstall were not executed.",
+    "No shellcheck executable available.",
+    "Connected repository has zero CI runs as reported by parent reviewer."
+  ],
+  "name": "gephgui-pkg",
+  "evidence_file": "report.json",
+  "ci_observation": {
+    "repo": "gephgui-pkg",
+    "total_count": 0,
+    "runs": []
+  },
+  "inventory": {
+    "repo": "gephgui-pkg",
+    "sha": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+    "files": 49,
+    "source_exts": [
+      [
+        "",
+        16
+      ],
+      [
+        ".bash",
+        5
+      ],
+      [
+        ".png",
+        5
+      ],
+      [
+        ".sh",
+        4
+      ],
+      [
+        ".plist",
+        2
+      ],
+      [
+        ".html",
+        2
+      ],
+      [
+        ".isl",
+        2
+      ]
+    ],
+    "tests": 0,
+    "ci": [
+      ".github/workflows/build.yaml"
+    ]
+  },
+  "handoff": {
+    "repository": "wwongw21/gephgui-pkg",
+    "repository_url": "https://github.com/wwongw21/gephgui-pkg",
+    "reviewed_branch": "master",
+    "reviewed_sha": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+    "audience": [
+      "Packaging maintainer",
+      "Release engineer",
+      "Maintainer of the privileged Geph host manager integration"
+    ],
+    "outcome": "Give maintainers a concrete repair and release handoff for invalid native package versions and unreliable Flatpak host-manager removal. All changes below are proposed and OPEN; no repository code was changed.",
+    "review_status": "Read-only review complete for owned packaging source. Two actionable findings; full native builds and privileged lifecycle acceptance remain unrun.",
+    "architecture": {
+      "purpose": "Build a Geph GUI, privileged manager and engine into Windows, macOS, Debian and Flatpak distributables.",
+      "components": [
+        {
+          "paths": [
+            "build-common.bash"
+          ],
+          "responsibility": "Stage source trees in a machine-local build root, retain incremental caches, build the frontend, and publish finished artifacts using a temporary file plus rename."
+        },
+        {
+          "paths": [
+            "gephgui-wry",
+            "geph5",
+            ".gitmodules"
+          ],
+          "responsibility": "Pinned upstream source dependencies. gephgui-wry gitlink is 2590443988e2a944751796f2066d317bfefdf29e; geph5 is 3b7bc1a6ff5c34093353fe0f53bcdfd8d6971649. The GUI embeds its built frontend; the manager locates the engine beside its executable.",
+          "review_limit": "Gitlink trees were not populated or reviewed in this pass."
+        },
+        {
+          "paths": [
+            "build-windows.bash",
+            "windows/setup.iss"
+          ],
+          "responsibility": "Build i686 binaries, optionally sign them, compile an elevated Inno installer, register the manager service, and unregister it before removal. The installer consumes a numeric VERSION_NUM separately from the display VERSION."
+        },
+        {
+          "paths": [
+            "build-macos.bash",
+            "macos/pkg-scripts/preinstall",
+            "macos/pkg-scripts/postinstall",
+            "macos/uninstall.sh"
+          ],
+          "responsibility": "Build per-architecture binaries, assemble the application, optionally sign/notarize, install into /Applications/Geph.app, register a root LaunchDaemon, and supply an explicit uninstaller."
+        },
+        {
+          "paths": [
+            "build-deb.bash",
+            "debian/build-deb-inner.sh"
+          ],
+          "responsibility": "Build inside an Ubuntu 22.04 container, generate package control metadata, place the GUI/manager/engine in /usr/bin, and register/unregister the manager through Debian maintainer scripts."
+        },
+        {
+          "paths": [
+            "build-flatpak.bash",
+            "flatpak/io.geph.GephGui.yml",
+            "flatpak/install-host-manager.sh",
+            "flatpak/geph-flatpak-watchdog.sh",
+            "flatpak/geph-cleanup.service",
+            "flatpak/geph-cleanup.timer"
+          ],
+          "responsibility": "Build the sandboxed GUI and bundle host-runnable manager/engine binaries. A privileged installer copies the host binaries into /usr/local/bin, registers the manager and a cleanup timer; the watchdog currently infers installation solely from an app-data directory."
+        },
+        {
+          "paths": [
+            ".github/workflows/build.yaml"
+          ],
+          "responsibility": "Run four native builds and publish prerelease artifacts for version tags. The reviewed fork has no recorded CI runs according to the separate connector check supplied by the parent reviewer."
+        }
+      ],
+      "important_contracts": [
+        "Machine-local staging must continue to keep concurrent OS builds from mutating shared frontend or Cargo intermediates.",
+        "The manager and engine must remain siblings on every installed platform.",
+        "A packaging-owned uninstall operation must identify the installed manager it owns before unregistering or deleting it.",
+        "Display identifiers may include a git hash; native package fields must obey their platform version grammar."
+      ]
+    },
+    "findings": [
+      {
+        "id": "VPN-1",
+        "status": "OPEN",
+        "severity": "High",
+        "title": "The untagged checkout produces invalid native package versions",
+        "evidence_classification": "Confirmed Debian failure; Windows rejection strongly supported by the generated nonnumeric value and Inno's numeric VersionInfoVersion contract",
+        "source_locations": [
+          {
+            "path": "debian/build-deb-inner.sh",
+            "lines": "24-25, 43",
+            "meaning": "Use git describe --always, remove only v, and write that value into control Version."
+          },
+          {
+            "path": "build-windows.bash",
+            "lines": "16, 133-137",
+            "meaning": "Derive VERSION_NUM by stripping v and a suffix, then append .0."
+          },
+          {
+            "path": "windows/setup.iss",
+            "lines": "17-23",
+            "meaning": "Pass VERSION_NUM into the numeric-only VersionInfoVersion field."
+          },
+          {
+            "path": ".github/workflows/build.yaml",
+            "lines": "119-120, 169-174",
+            "meaning": "Default-branch CI invokes these build paths without supplying a separate semantic version."
+          }
+        ],
+        "observed_failure": "This repository has zero remote tags. At the pinned HEAD, git describe --always returns f3a248b. Debian receives Version=f3a248b and dpkg-deb exits 2 because it does not start with a digit. Windows receives VERSION_NUM=f3a248b.0, which is not a numeric quad.",
+        "user_impact": "Maintainers cannot build a Debian artifact from the current default branch using the documented build entry point; Windows installer compilation also receives invalid version metadata. This blocks ordinary branch builds before usable artifacts can be produced.",
+        "repair": {
+          "preferred_change": "Define validated native package versions independently of the git display identifier. Require an explicit release semantic version or a recognized release tag; for an untagged development checkout generate a valid fallback such as Debian 0.0.0+git.<sha> and Windows 0.0.0.0. Preserve git describe output in artifact/display build metadata. Validate versions before expensive compilation.",
+          "change_surface": [
+            "build-common.bash: own shared version resolution/validation or expose clearly named outputs",
+            "build-deb.bash and debian/build-deb-inner.sh: consume Debian-native version",
+            "build-windows.bash and windows/setup.iss: consume validated numeric quad",
+            ".github/workflows/build.yaml: pass explicit release version on tag builds and exercise the untagged path",
+            "build-macos.bash: audit and explicitly define Apple bundle/package version use while changing the shared contract"
+          ],
+          "invariants": [
+            "The current checkout's SHA remains visible in development build metadata.",
+            "A release build cannot silently fall back to a development version after malformed input.",
+            "Windows numeric components satisfy Inno's accepted bounds and component count.",
+            "Debian development ordering is intentional and does not masquerade as the next release.",
+            "A VERSION override has a documented meaning; existing signing/publication behavior is preserved unless separately approved."
+          ],
+          "acceptance_criteria": [
+            "An untagged checkout resolves valid Debian and Windows native versions before compilation.",
+            "A valid release tag resolves to the intended package release version.",
+            "Malformed or unsupported version input fails early with an actionable error.",
+            "A minimal Debian package using the generated control Version builds successfully.",
+            "A clean Windows Inno compilation accepts generated VERSION_NUM.",
+            "The resulting UI/artifact metadata still identifies the reviewed commit."
+          ],
+          "regression_cases": [
+            "No tags available, including this f3a248b checkout",
+            "Annotated vX.Y.Z tag",
+            "Lightweight vX.Y.Z tag: explicitly support or reject with explanation; plain git describe does not select lightweight tags by default",
+            "Commit after the latest release tag",
+            "Prerelease/build metadata",
+            "Malformed VERSION override",
+            "SHA beginning with a letter versus a digit",
+            "Numeric components outside Inno's allowed range"
+          ],
+          "risks": [
+            "Version-order changes can prevent expected upgrades or accidentally make a development build appear newer than a release.",
+            "A shared version refactor can change macOS bundle metadata or updater comparisons; these consumers must be checked against actual upstream expectations."
+          ],
+          "rollback": "Revert the version-resolution change as one unit and retain the last known valid signed artifacts. Reverting source does not repair already published metadata; do not publish replacement artifacts under an existing immutable version."
+        },
+        "verification": {
+          "already_observed": [
+            "git describe --always -> f3a248b",
+            "git ls-remote --tags origin -> zero lines",
+            "Actual local dpkg-deb fixture with Version=f3a248b -> exit 2: version number does not start with digit"
+          ],
+          "exact_reproduction_prerequisites": [
+            "Pinned local checkout",
+            "Git",
+            "Python 3",
+            "dpkg-deb; no project build dependencies or network required for the minimal rejection fixture"
+          ],
+          "commands": [
+            {
+              "command": "git -C /workspace/repos/gephgui-pkg describe --always",
+              "expected_current": "f3a248b",
+              "status": "ALREADY_RUN"
+            },
+            {
+              "command": "git -C /workspace/repos/gephgui-pkg ls-remote --tags origin",
+              "expected_current": "Empty output",
+              "status": "ALREADY_RUN; requires GitHub network access if repeated"
+            },
+            {
+              "command": "Create a temporary pkg/DEBIAN/control containing Package: gephgui-wry, Version: f3a248b, Architecture: amd64, Maintainer and Description, then run dpkg-deb --build <temp>/pkg <temp>/out.deb",
+              "expected_current": "Exit 2 with invalid Version error",
+              "status": "ALREADY_RUN; fixture was temporary and removed"
+            }
+          ],
+          "proposed_postrepair_checks": [
+            "Validate generated versions without compiling",
+            "Build minimal Debian control fixture with the generated value",
+            "Run clean Windows Inno installer compile",
+            "Build actual platform packages and inspect installed/display/updater version metadata"
+          ],
+          "not_run": [
+            "Full Debian Docker build",
+            "Windows Inno/native build",
+            "macOS packaging and updater compatibility"
+          ]
+        }
+      },
+      {
+        "id": "VPN-2",
+        "status": "OPEN",
+        "severity": "Medium",
+        "title": "Ordinary Flatpak removal does not trigger privileged host-manager cleanup",
+        "evidence_classification": "Strongly supported by source, actual watchdog execution, and current upstream Flatpak deletion semantics",
+        "source_locations": [
+          {
+            "path": "flatpak/geph-flatpak-watchdog.sh",
+            "lines": "13-17",
+            "meaning": "Exit while the app-data directory exists, regardless of actual installed application state."
+          },
+          {
+            "path": "flatpak/install-host-manager.sh",
+            "lines": "22-39",
+            "meaning": "Install /usr/local/bin manager/engine, register its service, and enable the cleanup timer."
+          },
+          {
+            "path": "flatpak/geph-cleanup.service",
+            "lines": "7",
+            "meaning": "Pass the data directory as the watchdog's sole ownership signal."
+          }
+        ],
+        "observed_failure": "Normal Flatpak uninstall retains ~/.var/app data; --delete-data is a separate option. The unchanged watchdog returns successful no-op when that retained directory exists, even with no installed binaries in the supplied temporary bindir.",
+        "user_impact": "A user who removes the Flatpak can retain an installed and potentially running privileged host manager, engine, and cleanup timer indefinitely. Deleting app data while the Flatpak remains installed is also not reliable proof that the host manager should be removed.",
+        "repair": {
+          "preferred_change": "Replace the data-directory heuristic with explicit packaging ownership and verified installation state. Record the owning user/installation context in a root-owned record during privileged installation, reconcile all supported owners, and unregister only the matching packaging-owned host manager after no owner remains. If reliable cross-installation reconciliation cannot be implemented and tested immediately, replace the automatic promise with an explicit supported host-manager uninstall action; do not retain destructive automation keyed only to app-data deletion.",
+          "open_design_decision": "Choose and document ownership when user/system Flatpaks, multiple users, or a Debian-managed host service coexist. The existing global service and /usr/local/bin paths do not encode this ownership. This handoff does not authorize a new service architecture.",
+          "change_surface": [
+            "flatpak/install-host-manager.sh: persist validated installation/owner context and manager identity",
+            "flatpak/geph-flatpak-watchdog.sh: query installation state and reconcile owners before removal",
+            "flatpak/geph-cleanup.service and geph-cleanup.timer: pass a root-owned ownership record instead of raw app-data existence",
+            "Flatpak bootstrap contract in pinned gephgui-wry dependency: inspect and coordinate argument changes; dependency source was not reviewed here",
+            "User-facing Flatpak installation/removal documentation or explicit uninstall entry point"
+          ],
+          "invariants": [
+            "Retaining app data after uninstall does not prevent removal of an otherwise unowned host manager.",
+            "Deleting app data alone does not remove a manager still needed by an installed application.",
+            "One user removing a Flatpak does not remove a manager still needed by another supported owner.",
+            "A Flatpak cleanup operation never unregisters an unrelated Debian or manually installed manager.",
+            "Unknown installation state or unreadable ownership metadata retains the manager and reports a diagnostic rather than guessing.",
+            "Cleanup is idempotent and does not broaden deletion outside exact packaging-owned files/services.",
+            "Ownership records and executable paths consumed by a privileged cleanup action cannot be replaced by an unprivileged user."
+          ],
+          "acceptance_criteria": [
+            "Normal uninstall with retained data eventually cleans an unowned packaging manager, or the documented explicit uninstall action demonstrably does so.",
+            "Uninstall with --delete-data produces the same host cleanup result.",
+            "Data reset while the app remains installed does not tear down the manager.",
+            "Multiple-user and user/system installation cases follow the documented ownership policy.",
+            "An unrelated host-manager service survives the cleanup test.",
+            "Interrupted or repeated cleanup converges without deleting foreign policy, data, or executables."
+          ],
+          "regression_cases": [
+            "Installed app with existing data",
+            "Removed app with retained data",
+            "Removed app with --delete-data",
+            "Installed app whose data was manually removed",
+            "Two supported users, one uninstalls",
+            "System and user installs coexist",
+            "Flatpak metadata query fails",
+            "Ownership record missing/corrupt/redirected",
+            "Manager binary/service belongs to another packaging method",
+            "Partial cleanup and retry"
+          ],
+          "risks": [
+            "Incorrect owner reconciliation can remove a live privileged networking manager and disrupt connectivity.",
+            "Running per-user Flatpak queries from a root cleanup context requires deliberate user/installation selection.",
+            "The existing argument-templating/bootstrap contract lives partly in a separate gitlink dependency and must be traced before changing installer arguments."
+          ],
+          "rollback": "Restore prior installer assets only with automatic destructive cleanup disabled until ownership is verified. Keep the explicit manager removal route available. Preserve root-owned ownership records and service identity evidence across rollback; do not delete retained user app data as a cleanup workaround."
+        },
+        "verification": {
+          "already_observed": [
+            "Executed /bin/sh flatpak/geph-flatpak-watchdog.sh <existing-temp-data-dir> <absent-temp-bindir>: exit 0 with no unregister attempt",
+            "Read current upstream flatpak/flatpak doc/flatpak-uninstall.xml: --delete-data separately removes app data in ~/.var/app; fetched file blob cc29c049667b6369ba2a8a429facbdd2ed0fec62",
+            "Read upstream app/flatpak-builtins-uninstall.c option declaration: opt_delete_data is separately opt-in"
+          ],
+          "exact_reproduction_prerequisites": [
+            "Pinned source",
+            "/bin/sh",
+            "An existing temporary owner/app-data directory"
+          ],
+          "commands": [
+            {
+              "command": "/bin/sh /workspace/repos/gephgui-pkg/flatpak/geph-flatpak-watchdog.sh <existing-temp-data-dir> <absent-temp-bindir>",
+              "expected_current": "Exit 0 without touching the absent bindir or calling unregister-manager",
+              "status": "ALREADY_RUN; only use the existing-directory branch for this unprivileged reproduction"
+            }
+          ],
+          "proposed_postrepair_checks": [
+            "Exercise pure ownership/installation-state reconciliation with command doubles",
+            "Run full installation/removal cases in a disposable Linux VM with controlled service ownership",
+            "Inspect manager process, binaries, systemd unit/timer and retained app data before and after each removal mode"
+          ],
+          "not_run": [
+            "Actual Flatpak install/uninstall",
+            "Privileged manager registration/removal",
+            "Multi-user lifecycle",
+            "Mixed Debian/Flatpak ownership"
+          ]
+        }
+      }
+    ],
+    "prioritized_sequence": [
+      {
+        "order": 1,
+        "status": "OPEN",
+        "work": "Resolve and validate native version semantics before compiling. This removes the demonstrated packaging blocker.",
+        "depends_on": []
+      },
+      {
+        "order": 2,
+        "status": "OPEN",
+        "work": "Trace the pinned bootstrap/manager integration and choose Flatpak host ownership behavior; implement the reconciliation or explicit uninstall repair.",
+        "depends_on": []
+      },
+      {
+        "order": 3,
+        "status": "OPEN",
+        "work": "Run targeted version and ownership regression cases, then one clean build per supported platform with complete pinned submodules.",
+        "depends_on": [
+          1,
+          2
+        ]
+      },
+      {
+        "order": 4,
+        "status": "OPEN",
+        "work": "Validate install, upgrade, disconnect/restoration and uninstall in disposable native environments; verify only owned services and paths are changed.",
+        "depends_on": [
+          3
+        ]
+      },
+      {
+        "order": 5,
+        "status": "OPEN",
+        "work": "Inspect signed/notarized release metadata, retain checksums and test receipts, and review the concrete candidate before publication.",
+        "depends_on": [
+          4
+        ]
+      }
+    ],
+    "checks_already_completed": [
+      {
+        "check": "bash -n across build-common, Windows/macOS/Debian/Flatpak build scripts, Debian inner build, macOS preinstall/postinstall/uninstall",
+        "result": "Historical PASS retained. The recorded combined command parses only its first listed file; see historical_check_corrections and the fresh per-file results below.",
+        "historical_result": "PASS; syntax only",
+        "historical_command_record": "bash -n build-common.bash build-windows.bash build-macos.bash build-deb.bash debian/build-deb-inner.sh build-flatpak.bash macos/pkg-scripts/preinstall macos/pkg-scripts/postinstall macos/uninstall.sh"
+      },
+      {
+        "check": "Source working trees after review",
+        "result": "Historical source-only check; it predates this documentation repair. This branch now intentionally contains the syntax-check runner, its fresh log and hash manifest under docs/reviews/2026-10-22/. The pinned source scripts still match the reviewed blob IDs recorded in the fresh log.",
+        "historical_result": "Clean; evidence files live outside repositories",
+        "historical_scope": "The original review reported its source working trees clean and stored evidence outside those worktrees. That was not a claim about this later handoff-repair branch."
+      },
+      {
+        "check": "Focused invalid-version and retained-data watchdog reproductions",
+        "result": "Failure behavior confirmed as described above"
+      },
+      {
+        "check": "Per-file Bash syntax check against the pinned source revision",
+        "result": "PASS: 12 of 12 files returned exit code 0 from separate bash -n processes; see docs/reviews/2026-10-22/bash-syntax-check.log.",
+        "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+        "bash_version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-cygwin)",
+        "scope_limit": "Syntax parsing only; scripts were not executed and no package or lifecycle checks were run.",
+        "script_inventory": "docs/reviews/2026-10-22/bash-syntax-check.log and the script_results array in report.json"
+      },
+      {
+        "check": "Windows checkout line-ending attributes",
+        "result": "PASS: with core.autocrlf=true, Git reports text=set and eol=lf for the runner, log and SHA-256 manifest.",
+        "command": "git -c core.autocrlf=true check-attr text eol -- docs/reviews/2026-10-22/check-bash-syntax.sh docs/reviews/2026-10-22/bash-syntax-check.log docs/reviews/2026-10-22/bash-syntax-check.sha256",
+        "files": [
+          "docs/reviews/2026-10-22/check-bash-syntax.sh",
+          "docs/reviews/2026-10-22/bash-syntax-check.log",
+          "docs/reviews/2026-10-22/bash-syntax-check.sha256"
+        ]
+      }
+    ],
+    "limits_and_mitigations": [
+      {
+        "limit": "Pinned runtime/frontend gitlinks not reviewed",
+        "mitigation": "Populate exact gitlinks and inspect manager registration, engine lookup and bootstrap argument contracts before changing integration."
+      },
+      {
+        "limit": "Full native builds and lifecycle tests unrun",
+        "mitigation": "Treat repaired artifacts as candidates until platform-specific build/install/upgrade/uninstall receipts exist."
+      },
+      {
+        "limit": "Vendored executables and DLLs not reverse engineered or vulnerability-scanned",
+        "mitigation": "Retain provenance/hashes and perform a separate current dependency assessment when preparing a release."
+      },
+      {
+        "limit": "No shellcheck installed",
+        "mitigation": "The current result establishes Bash parsing only; add the repository's chosen shell lint check when running release validation."
+      }
+    ],
+    "evidence_files": [
+      "docs/reviews/2026-10-22/check-bash-syntax.sh",
+      "docs/reviews/2026-10-22/bash-syntax-check.log",
+      "docs/reviews/2026-10-22/bash-syntax-check.sha256",
+      ".gitattributes"
+    ],
+    "completion_boundary": "This is an implementation/release handoff. Every repair remains OPEN. No fixes, releases, privileged host changes, issues, or pull requests were created.",
+    "historical_evidence_not_included": "The earlier external vpn.json diagnostic is not part of this checkout."
+  },
+  "handoff_date": "2026-10-22",
+  "all_findings_status": "OPEN",
+  "implementation_status": "No repairs applied; proposed work only.",
+  "delivery_notes": {
+    "destination_repository": "wwongw21/gephgui-pkg",
+    "status": "All findings remain OPEN; documentation transfer only.",
+    "portable_evidence": "The fresh syntax runner, log and SHA-256 manifest are stored under docs/reviews/2026-10-22/. The log records the pinned source revision and the Git blob ID for each checked script. The earlier combined bash -n PASS is preserved as history and explicitly qualified. The repository .gitattributes pins LF checkout format for the runner, log and checksum manifest; git check-attr confirmed these settings with core.autocrlf=true.",
+    "diagnostics_included": [
+      "docs/reviews/2026-10-22/check-bash-syntax.sh",
+      "docs/reviews/2026-10-22/bash-syntax-check.log",
+      "docs/reviews/2026-10-22/bash-syntax-check.sha256",
+      ".gitattributes"
+    ],
+    "not_included": "Original environments, model weights, user data and complete source snapshots are not included. Clone the pinned source and follow the recorded prerequisites. Bug-demonstration scripts intentionally assert pre-fix behavior; they are not a post-fix passing suite."
+  },
+  "historical_check_corrections": [
+    {
+      "record": "tests[0] (original combined bash -n invocation)",
+      "original_command": "bash -n build-common.bash build-windows.bash build-macos.bash build-deb.bash debian/build-deb-inner.sh build-flatpak.bash macos/pkg-scripts/preinstall macos/pkg-scripts/postinstall macos/uninstall.sh",
+      "recorded_result": "PASS",
+      "correction": "The recorded command lists nine paths, but Bash uses only the first non-option path as the script to parse; later paths are arguments to that script. The command alone therefore does not establish syntax for the other eight paths. No per-file result log from that earlier run was retained. The historical PASS is preserved as the original record, not as evidence that all nine files were checked.",
+      "replacement_evidence": "docs/reviews/2026-10-22/bash-syntax-check.log"
+    }
+  ]
+}

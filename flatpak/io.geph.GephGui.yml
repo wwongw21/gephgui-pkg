@@ -109,8 +109,10 @@ modules:
     sources:
       - type: dir
         path: "../blobs/linux-x64"
-  # Packaging-owned privileged installer + self-cleanup watchdog assets, staged out
-  # to the host by the bootstrap. geph5 itself stays unaware of any of this.
+  # Packaging-owned installer, explicit owner-removal action, and the legacy
+  # staging names required by the pinned GUI bootstrap. Cleanup unit templates
+  # are copied into the sandbox only for that staging contract; the installer
+  # never installs or enables them on a new build.
   - name: host-manager-assets
     buildsystem: "simple"
     build-commands:
@@ -118,6 +120,8 @@ modules:
       - "install -D -m755 geph-flatpak-watchdog.sh /app/libexec/geph/geph-flatpak-watchdog.sh"
       - "install -D -m644 geph-cleanup.service /app/libexec/geph/geph-cleanup.service"
       - "install -D -m644 geph-cleanup.timer /app/libexec/geph/geph-cleanup.timer"
+      - "install -D -m755 geph-migrate-host-manager.sh /app/bin/geph-migrate-host-manager"
+      - "install -D -m755 geph-uninstall-host-manager.sh /app/bin/geph-uninstall-host-manager"
     sources:
       - type: file
         path: "install-host-manager.sh"
@@ -127,6 +131,10 @@ modules:
         path: "geph-cleanup.service"
       - type: file
         path: "geph-cleanup.timer"
+      - type: file
+        path: "geph-uninstall-host-manager.sh"
+      - type: file
+        path: "geph-migrate-host-manager.sh"
   # rfd (our native dialog library) shells out to `zenity` for message dialogs, and
   # the GNOME runtime does not ship it, so build it into the sandbox. -Dmanpage=false
   # avoids the help2man build dependency; webkitgtk is off by default.

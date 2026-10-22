@@ -754,39 +754,95 @@ ALREADY_RUN; only use the existing-directory branch for this unprivileged reprod
 
 ## Checks already completed
 
-### Item 1
+### Historical shell syntax claim and correction
 
-#### Check
+The original report recorded this command as `PASS; syntax only`:
 
-bash -n across build-common, Windows/macOS/Debian/Flatpak build scripts, Debian inner build, macOS preinstall/postinstall/uninstall
+```sh
+bash -n build-common.bash build-windows.bash build-macos.bash build-deb.bash debian/build-deb-inner.sh build-flatpak.bash macos/pkg-scripts/preinstall macos/pkg-scripts/postinstall macos/uninstall.sh
+```
 
-#### Result
+Bash parses the first file named after its options. It treats later file names as arguments to that first script, so this one command does not check all nine listed files. The original PASS is kept as history, but it does not prove that the other eight files passed syntax checks. No per-file log from that earlier run was retained.
 
-PASS; syntax only
+### Fresh per-file Bash syntax check
 
-### Item 2
+The portable runner is [check-bash-syntax.sh](check-bash-syntax.sh). Run it from any directory inside a Git checkout of this repository; it does not need a full history or network access:
 
-#### Check
+```sh
+bash docs/reviews/2026-10-22/check-bash-syntax.sh docs/reviews/2026-10-22/bash-syntax-check.log
+```
 
-Source working trees after review
+The runner checks each worktree file against the Git blob recorded for source revision `f3a248b2aefe31158ebd1d1ecae1f689e604fdfe` before starting a separate `bash -n` process for that file. The fresh run used GNU bash, version 5.3.15(1)-release (x86_64-pc-cygwin). All 12 files matched the pinned source and returned exit code 0.
 
-#### Result
+| Script | Git blob at pinned source | Result |
+| --- | --- | --- |
+| `build-common.bash` | `0e489d0b02a7fadbe49f71822ca74280f874f0ab` | PASS (exit 0) |
+| `build-windows.bash` | `92bf618be3bb6b2526559d1c689f1d172bac620c` | PASS (exit 0) |
+| `build-macos.bash` | `1c99b55465fa1dae85dbcaf20610ec300332870c` | PASS (exit 0) |
+| `build-deb.bash` | `de2e9508b41bf5c978615fd89407854410c0e5e7` | PASS (exit 0) |
+| `debian/build-deb-inner.sh` | `2150a2022038733cbe68fadff3f55f7b175897fc` | PASS (exit 0) |
+| `build-flatpak.bash` | `b1b27cbf0aaeecb1c29154f8e655c8b81b570d37` | PASS (exit 0) |
+| `flatpak/install-host-manager.sh` | `d375cd28d3c070d6c53747b80aaec16418a9e5af` | PASS (exit 0) |
+| `flatpak/geph-flatpak-watchdog.sh` | `db874ad1937eda83cd0940f2bc12fad4ae38e988` | PASS (exit 0) |
+| `macos/create-dmg` | `30646249b72365390d43c5fae8d0f1a22d79ef14` | PASS (exit 0) |
+| `macos/pkg-scripts/preinstall` | `a8d66f03410fc7760acbd472dea2a83d9fc38017` | PASS (exit 0) |
+| `macos/pkg-scripts/postinstall` | `a8f72a47ddab100b65ba11d3a4f8560fcd132795` | PASS (exit 0) |
+| `macos/uninstall.sh` | `f8a88860cd740360c9690bf5631c687e2cf2d93f` | PASS (exit 0) |
 
-Clean; evidence files live outside repositories
+The full output is in [bash-syntax-check.log](bash-syntax-check.log). [bash-syntax-check.sha256](bash-syntax-check.sha256) records SHA-256 digests for the runner and log. The repository [`.gitattributes`](../../../.gitattributes) keeps all three files in LF format, including on Windows when `core.autocrlf` is enabled, so the recorded digests and Bash runner remain usable after checkout. Git confirmed `text=set` and `eol=lf` for all three files with `core.autocrlf=true`. This check only parses syntax. It does not execute scripts, build packages, or validate installation and removal behavior.
 
-### Item 3
+### Other historical checks
 
-#### Check
+The original review recorded that its source worktrees were clean and evidence was stored outside them. That described the earlier source-only review state. This handoff-repair branch now intentionally includes the runner, log and hash manifest under this review directory. The pinned source files checked above match their recorded Git blob IDs.
 
-Focused invalid-version and retained-data watchdog reproductions
-
-#### Result
-
-Failure behavior confirmed as described above
+The focused invalid-version and retained-data watchdog reproductions remain recorded as completed in the original review. This documentation repair did not repeat them.
 
 ## Evidence files
 
-1. /workspace/review/vpn.json
+1. `check-bash-syntax.sh` — portable per-file runner
+2. `bash-syntax-check.log` — fresh output, source revision, per-file pins and exit codes
+3. `bash-syntax-check.sha256` — SHA-256 digests for the runner and log
+4. Repository-root `.gitattributes` — keeps the runner and evidence files in LF format on checkout
+
+The earlier external `vpn.json` diagnostic was not included in this checkout.
+
+## Delivery and diagnostic files
+
+### Destination repository
+
+wwongw21/gephgui-pkg
+
+### Status
+
+All findings remain OPEN; this change corrects and extends the engineering handoff. It does not apply package or lifecycle repairs.
+
+### Portable evidence
+
+The syntax runner, log and hash manifest are stored under this review directory. The log records the pinned source revision and a Git blob ID for every checked script. The root `.gitattributes` file keeps the runner and both evidence files in LF format when `core.autocrlf` is enabled. The original combined Bash command and its reported PASS remain visible as history with the limitation explained above.
+
+### Diagnostics included
+
+1. `check-bash-syntax.sh`
+2. `bash-syntax-check.log`
+3. `bash-syntax-check.sha256`
+4. `.gitattributes`
+
+### Not included
+
+Original environments, model weights, user data and complete source snapshots are not included. Clone the pinned source and follow the recorded prerequisites. Bug-demonstration scripts intentionally assert pre-fix behavior; they are not a post-fix passing suite.
+
+
+## Remaining review limits
+
+1. Full Windows/macOS/Debian/Flatpak packages not built.
+
+2. Gitlink dependencies geph5, gephgui-wry and shared-modules were not populated or reviewed; packaging-layer source only.
+
+3. Native installation, upgrade, service registration, network restoration and privileged uninstall were not executed.
+
+4. No shellcheck executable available.
+
+5. Connected repository has zero CI runs as reported by parent reviewer.
 
 ## Completion boundary
 

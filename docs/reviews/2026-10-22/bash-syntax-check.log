@@ -1,0 +1,21 @@
+Bash syntax check (syntax only; no scripts are executed)
+Source revision: f3a248b2aefe31158ebd1d1ecae1f689e604fdfe
+Bash executable: bash
+GNU bash, version 5.3.15(1)-release (x86_64-pc-cygwin)
+
+PASS build-common.bash | blob 0e489d0b02a7fadbe49f71822ca74280f874f0ab | bash -n exit 0
+PASS build-windows.bash | blob 92bf618be3bb6b2526559d1c689f1d172bac620c | bash -n exit 0
+PASS build-macos.bash | blob 1c99b55465fa1dae85dbcaf20610ec300332870c | bash -n exit 0
+PASS build-deb.bash | blob de2e9508b41bf5c978615fd89407854410c0e5e7 | bash -n exit 0
+PASS debian/build-deb-inner.sh | blob 2150a2022038733cbe68fadff3f55f7b175897fc | bash -n exit 0
+PASS build-flatpak.bash | blob b1b27cbf0aaeecb1c29154f8e655c8b81b570d37 | bash -n exit 0
+PASS flatpak/install-host-manager.sh | blob d375cd28d3c070d6c53747b80aaec16418a9e5af | bash -n exit 0
+PASS flatpak/geph-flatpak-watchdog.sh | blob db874ad1937eda83cd0940f2bc12fad4ae38e988 | bash -n exit 0
+PASS macos/create-dmg | blob 30646249b72365390d43c5fae8d0f1a22d79ef14 | bash -n exit 0
+PASS macos/pkg-scripts/preinstall | blob a8d66f03410fc7760acbd472dea2a83d9fc38017 | bash -n exit 0
+PASS macos/pkg-scripts/postinstall | blob a8f72a47ddab100b65ba11d3a4f8560fcd132795 | bash -n exit 0
+PASS macos/uninstall.sh | blob f8a88860cd740360c9690bf5631c687e2cf2d93f | bash -n exit 0
+
+Checked: 12
+Failures: 0
+Result: PASS

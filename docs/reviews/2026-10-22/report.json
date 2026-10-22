@@ -116,6 +116,122 @@
     {
       "command": "/bin/sh flatpak/geph-flatpak-watchdog.sh <existing-temp-data-dir> <absent-temp-bindir>",
       "result": "Exit 0, no unregister attempt"
+    },
+    {
+      "command": "bash docs/reviews/2026-10-22/check-bash-syntax.sh docs/reviews/2026-10-22/bash-syntax-check.log",
+      "result": "PASS: 12 scripts checked in 12 individual bash -n processes; all exit codes were 0.",
+      "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+      "bash_version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-cygwin)",
+      "runner": "docs/reviews/2026-10-22/check-bash-syntax.sh",
+      "log": "docs/reviews/2026-10-22/bash-syntax-check.log",
+      "script_results": [
+        {
+          "path": "build-common.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "0e489d0b02a7fadbe49f71822ca74280f874f0ab",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "build-windows.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "92bf618be3bb6b2526559d1c689f1d172bac620c",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "build-macos.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "1c99b55465fa1dae85dbcaf20610ec300332870c",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "build-deb.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "de2e9508b41bf5c978615fd89407854410c0e5e7",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "debian/build-deb-inner.sh",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "2150a2022038733cbe68fadff3f55f7b175897fc",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "build-flatpak.bash",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "b1b27cbf0aaeecb1c29154f8e655c8b81b570d37",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "flatpak/install-host-manager.sh",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "d375cd28d3c070d6c53747b80aaec16418a9e5af",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "flatpak/geph-flatpak-watchdog.sh",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "db874ad1937eda83cd0940f2bc12fad4ae38e988",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "macos/create-dmg",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "30646249b72365390d43c5fae8d0f1a22d79ef14",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "macos/pkg-scripts/preinstall",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "a8d66f03410fc7760acbd472dea2a83d9fc38017",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "macos/pkg-scripts/postinstall",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "a8f72a47ddab100b65ba11d3a4f8560fcd132795",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        },
+        {
+          "path": "macos/uninstall.sh",
+          "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+          "git_blob": "f8a88860cd740360c9690bf5631c687e2cf2d93f",
+          "parser": "bash -n, one file per process",
+          "exit_code": 0,
+          "result": "PASS"
+        }
+      ],
+      "scope_limit": "Syntax parsing only. These commands did not execute the scripts, build packages, or test installation and removal behavior."
+    },
+    {
+      "command": "git -c core.autocrlf=true check-attr text eol -- docs/reviews/2026-10-22/check-bash-syntax.sh docs/reviews/2026-10-22/bash-syntax-check.log docs/reviews/2026-10-22/bash-syntax-check.sha256",
+      "result": "PASS: all three files report text=set and eol=lf.",
+      "files": [
+        "docs/reviews/2026-10-22/check-bash-syntax.sh",
+        "docs/reviews/2026-10-22/bash-syntax-check.log",
+        "docs/reviews/2026-10-22/bash-syntax-check.sha256"
+      ]
     }
   ],
   "limitations": [
@@ -507,15 +623,37 @@
     "checks_already_completed": [
       {
         "check": "bash -n across build-common, Windows/macOS/Debian/Flatpak build scripts, Debian inner build, macOS preinstall/postinstall/uninstall",
-        "result": "PASS; syntax only"
+        "result": "Historical PASS retained. The recorded combined command parses only its first listed file; see historical_check_corrections and the fresh per-file results below.",
+        "historical_result": "PASS; syntax only",
+        "historical_command_record": "bash -n build-common.bash build-windows.bash build-macos.bash build-deb.bash debian/build-deb-inner.sh build-flatpak.bash macos/pkg-scripts/preinstall macos/pkg-scripts/postinstall macos/uninstall.sh"
       },
       {
         "check": "Source working trees after review",
-        "result": "Clean; evidence files live outside repositories"
+        "result": "Historical source-only check; it predates this documentation repair. This branch now intentionally contains the syntax-check runner, its fresh log and hash manifest under docs/reviews/2026-10-22/. The pinned source scripts still match the reviewed blob IDs recorded in the fresh log.",
+        "historical_result": "Clean; evidence files live outside repositories",
+        "historical_scope": "The original review reported its source working trees clean and stored evidence outside those worktrees. That was not a claim about this later handoff-repair branch."
       },
       {
         "check": "Focused invalid-version and retained-data watchdog reproductions",
         "result": "Failure behavior confirmed as described above"
+      },
+      {
+        "check": "Per-file Bash syntax check against the pinned source revision",
+        "result": "PASS: 12 of 12 files returned exit code 0 from separate bash -n processes; see docs/reviews/2026-10-22/bash-syntax-check.log.",
+        "source_revision": "f3a248b2aefe31158ebd1d1ecae1f689e604fdfe",
+        "bash_version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-cygwin)",
+        "scope_limit": "Syntax parsing only; scripts were not executed and no package or lifecycle checks were run.",
+        "script_inventory": "docs/reviews/2026-10-22/bash-syntax-check.log and the script_results array in report.json"
+      },
+      {
+        "check": "Windows checkout line-ending attributes",
+        "result": "PASS: with core.autocrlf=true, Git reports text=set and eol=lf for the runner, log and SHA-256 manifest.",
+        "command": "git -c core.autocrlf=true check-attr text eol -- docs/reviews/2026-10-22/check-bash-syntax.sh docs/reviews/2026-10-22/bash-syntax-check.log docs/reviews/2026-10-22/bash-syntax-check.sha256",
+        "files": [
+          "docs/reviews/2026-10-22/check-bash-syntax.sh",
+          "docs/reviews/2026-10-22/bash-syntax-check.log",
+          "docs/reviews/2026-10-22/bash-syntax-check.sha256"
+        ]
       }
     ],
     "limits_and_mitigations": [
@@ -537,9 +675,13 @@
       }
     ],
     "evidence_files": [
-      "/workspace/review/vpn.json"
+      "docs/reviews/2026-10-22/check-bash-syntax.sh",
+      "docs/reviews/2026-10-22/bash-syntax-check.log",
+      "docs/reviews/2026-10-22/bash-syntax-check.sha256",
+      ".gitattributes"
     ],
-    "completion_boundary": "This is an implementation/release handoff. Every repair remains OPEN. No fixes, releases, privileged host changes, issues, or pull requests were created."
+    "completion_boundary": "This is an implementation/release handoff. Every repair remains OPEN. No fixes, releases, privileged host changes, issues, or pull requests were created.",
+    "historical_evidence_not_included": "The earlier external vpn.json diagnostic is not part of this checkout."
   },
   "handoff_date": "2026-10-22",
   "all_findings_status": "OPEN",
@@ -547,8 +689,22 @@
   "delivery_notes": {
     "destination_repository": "wwongw21/gephgui-pkg",
     "status": "All findings remain OPEN; documentation transfer only.",
-    "portable_evidence": "This JSON retains the complete repository-specific handoff. Historical /workspace paths are evidence references and prerequisites, not portable hyperlinks. Applicable repository-specific diagnostics are included alongside the report.",
-    "diagnostics_included": [],
+    "portable_evidence": "The fresh syntax runner, log and SHA-256 manifest are stored under docs/reviews/2026-10-22/. The log records the pinned source revision and the Git blob ID for each checked script. The earlier combined bash -n PASS is preserved as history and explicitly qualified. The repository .gitattributes pins LF checkout format for the runner, log and checksum manifest; git check-attr confirmed these settings with core.autocrlf=true.",
+    "diagnostics_included": [
+      "docs/reviews/2026-10-22/check-bash-syntax.sh",
+      "docs/reviews/2026-10-22/bash-syntax-check.log",
+      "docs/reviews/2026-10-22/bash-syntax-check.sha256",
+      ".gitattributes"
+    ],
     "not_included": "Original environments, model weights, user data and complete source snapshots are not included. Clone the pinned source and follow the recorded prerequisites. Bug-demonstration scripts intentionally assert pre-fix behavior; they are not a post-fix passing suite."
-  }
+  },
+  "historical_check_corrections": [
+    {
+      "record": "tests[0] (original combined bash -n invocation)",
+      "original_command": "bash -n build-common.bash build-windows.bash build-macos.bash build-deb.bash debian/build-deb-inner.sh build-flatpak.bash macos/pkg-scripts/preinstall macos/pkg-scripts/postinstall macos/uninstall.sh",
+      "recorded_result": "PASS",
+      "correction": "The recorded command lists nine paths, but Bash uses only the first non-option path as the script to parse; later paths are arguments to that script. The command alone therefore does not establish syntax for the other eight paths. No per-file result log from that earlier run was retained. The historical PASS is preserved as the original record, not as evidence that all nine files were checked.",
+      "replacement_evidence": "docs/reviews/2026-10-22/bash-syntax-check.log"
+    }
+  ]
 }

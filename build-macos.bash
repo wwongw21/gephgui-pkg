@@ -23,6 +23,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$PWD"
 . ./build-common.bash
+resolve_build_versions "$REPO_ROOT"
+validate_macos_version "$PACKAGE_VERSION_MACOS"
 MACOS_DIR="$REPO_ROOT/macos"
 LOCAL_MACOS="$LOCAL_BUILD_ROOT/macos"
 OUTPUT="$REPO_ROOT/output"
@@ -48,12 +50,11 @@ min_os_for() { case "$1" in aarch64-apple-darwin) echo 11.0 ;; *) echo 10.15 ;; 
 # lipo N inputs into one universal output; plain copy when only one arch is built.
 lipo_or_copy() { local out="$1"; shift; if [ "$#" -eq 1 ]; then cp "$1" "$out"; else lipo -create -output "$out" "$@"; fi; }
 
-# Exported so the cargo builds below bake it in: gephgui-wry reads it via
-# option_env!("VERSION") for the "About" display and the auto-updater's
-# current-version check. Without the export it compiles to None -> the UI shows
-# "(development version)" and updates misbehave.
-export VERSION="${VERSION:-$(git -C "$REPO_ROOT" describe --always 2>/dev/null || echo 0.0.0)}"
-ARTIFACT="$OUTPUT/geph-macos-${VERSION#v}.pkg"
+# VERSION stays the display/build identity (including a commit hash); native
+# bundle and installer fields use the validated numeric PACKAGE_VERSION_MACOS.
+# The resolver exports VERSION so gephgui-wry bakes it in via option_env! for
+# the About display and auto-updater's current-version check.
+ARTIFACT="$OUTPUT/geph-macos-${VERSION_ARTIFACT}.pkg"
 
 # Signing/notarization. On a machine logged into the Apple Developer account
 # (i.e. the Developer ID certs live in the login keychain) these are auto-detected
@@ -134,9 +135,10 @@ rsync -aW --delete "$MACOS_DIR/template.app/" "$BUILD_APP/"
 # Stamp the real version into the bundle: the template's Info.plist carries a
 # stale hardcoded CFBundleShortVersionString/CFBundleVersion (LaunchServices,
 # Finder's Get Info and crash reports would all report it otherwise). Apple
-# wants these numeric, so strip the leading "v" from git describe.
-plutil -replace CFBundleShortVersionString -string "${VERSION#v}" "$BUILD_APP/Contents/Info.plist"
-plutil -replace CFBundleVersion            -string "${VERSION#v}" "$BUILD_APP/Contents/Info.plist"
+# wants these numeric; keep the app's git identity in VERSION for the About
+# screen/updater and use the normalized three-part value in these native fields.
+plutil -replace CFBundleShortVersionString -string "$PACKAGE_VERSION_MACOS" "$BUILD_APP/Contents/Info.plist"
+plutil -replace CFBundleVersion            -string "$PACKAGE_VERSION_MACOS" "$BUILD_APP/Contents/Info.plist"
 
 mkdir -p "$CARGO_OUT"
 
@@ -213,7 +215,7 @@ pkgbuild \
     --component-plist "$MACOS_DIR/component.plist" \
     --scripts "$MACOS_DIR/pkg-scripts" \
     --identifier "$BUNDLE_ID" \
-    --version "$VERSION" \
+    --version "$PACKAGE_VERSION_MACOS" \
     --install-location "/" \
     --ownership recommended \
     "$LOCAL_MACOS/geph-component.pkg"
@@ -245,7 +247,7 @@ cat > "$DIST_XML" <<XML_EOF
     <choice id="$BUNDLE_ID" visible="false">
         <pkg-ref id="$BUNDLE_ID"/>
     </choice>
-    <pkg-ref id="$BUNDLE_ID" version="$VERSION" onConclusion="none">geph-component.pkg</pkg-ref>
+    <pkg-ref id="$BUNDLE_ID" version="$PACKAGE_VERSION_MACOS" onConclusion="none">geph-component.pkg</pkg-ref>
 </installer-gui-script>
 XML_EOF
 

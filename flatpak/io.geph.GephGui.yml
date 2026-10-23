@@ -31,6 +31,11 @@ modules:
         # libxdo-sys links -lxdo without consulting pkg-config, so point rustc
         # at the libxdo we install into /app/lib above.
         RUSTFLAGS: "-L /app/lib"
+      # Keep the host-resolved VERSION in sync with the artifact name. This
+      # source tree is partial, so the helper must not recheck host dirtiness
+      # against it; standalone manifest builds derive a clean Git identity.
+      secret-env:
+        - VERSION
       # This module is a permanent cache miss: its dir sources (gephgui-wry,
       # geph5, .git) change on every commit, so flatpak-builder rebuilds it from
       # an empty sandbox each time. Mount a persistent host cache dir so the
@@ -44,11 +49,12 @@ modules:
     build-commands:
       - |
         if [ -d .pkg-git ]; then
-          VERSION=$(git --git-dir=.pkg-git describe --always 2>/dev/null || git --git-dir=.pkg-git rev-parse --short HEAD)
+          VERSION_GIT_DIR=.pkg-git bash -e -c '. ./build-common.bash; resolve_build_versions "$PWD" skip-dirty; printf "%s" "$VERSION" > .version'
+        elif [ -z "${VERSION:-}" ]; then
+          printf "dev" > .version
         else
-          VERSION="dev"
+          printf "%s" "$VERSION" > .version
         fi
-        printf "%s" "$VERSION" > .version
       - |
         export VERSION="$(cat .version)"
         export npm_config_cache=/var/tmp/geph-flatpak-cache/npm
@@ -89,6 +95,8 @@ modules:
       - type: dir
         path: "../.git"
         dest: ".pkg-git"
+      - type: file
+        path: "../build-common.bash"
   # The privileged host manager cannot run inside the sandbox, so we bundle a
   # host-runnable (statically linked, musl) build of geph5 + geph5-client. The
   # startup bootstrap (gephgui-wry/src/bootstrap.rs) stages these out to the host
@@ -101,8 +109,10 @@ modules:
     sources:
       - type: dir
         path: "../blobs/linux-x64"
-  # Packaging-owned privileged installer + self-cleanup watchdog assets, staged out
-  # to the host by the bootstrap. geph5 itself stays unaware of any of this.
+  # Packaging-owned installer, explicit owner-removal action, and the legacy
+  # staging names required by the pinned GUI bootstrap. Cleanup unit templates
+  # are copied into the sandbox only for that staging contract; the installer
+  # never installs or enables them on a new build.
   - name: host-manager-assets
     buildsystem: "simple"
     build-commands:
@@ -110,6 +120,8 @@ modules:
       - "install -D -m755 geph-flatpak-watchdog.sh /app/libexec/geph/geph-flatpak-watchdog.sh"
       - "install -D -m644 geph-cleanup.service /app/libexec/geph/geph-cleanup.service"
       - "install -D -m644 geph-cleanup.timer /app/libexec/geph/geph-cleanup.timer"
+      - "install -D -m755 geph-migrate-host-manager.sh /app/bin/geph-migrate-host-manager"
+      - "install -D -m755 geph-uninstall-host-manager.sh /app/bin/geph-uninstall-host-manager"
     sources:
       - type: file
         path: "install-host-manager.sh"
@@ -119,6 +131,10 @@ modules:
         path: "geph-cleanup.service"
       - type: file
         path: "geph-cleanup.timer"
+      - type: file
+        path: "geph-uninstall-host-manager.sh"
+      - type: file
+        path: "geph-migrate-host-manager.sh"
   # rfd (our native dialog library) shells out to `zenity` for message dialogs, and
   # the GNOME runtime does not ship it, so build it into the sandbox. -Dmanpage=false
   # avoids the help2man build dependency; webkitgtk is off by default.

@@ -1,5 +1,10 @@
 name: CI
 
+env:
+  # Tag builds keep the exact release tag; branch and pull-request builds let
+  # build-common.bash derive a git-describe identity including lightweight tags.
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+
 on:
   push:
     branches: [master, next]
@@ -44,7 +49,6 @@ jobs:
       #       ${{ runner.os }}-npm-
       - name: Build macOS
         run: |
-          export VERSION=$(git describe --always)
           ./build-macos.bash
       - uses: actions/upload-artifact@v4
         with:
@@ -60,15 +64,27 @@ jobs:
           fetch-depth: 0
       - name: Fetch all tags
         run: git fetch --tags --force
+      - name: Verify the Flatpak lifecycle lock dependency
+        run: |
+          flock_path="$(command -v flock)"
+          printf 'Using util-linux flock: %s\n' "$flock_path"
+          flock_version="$(flock --version)"
+          printf '%s\n' "$flock_version"
+          grep -Fq 'util-linux' <<< "$flock_version"
+      - name: Run version and Flatpak lifecycle fixtures
+        run: |
+          bash tests/version-normalization.bash
+          bash tests/flatpak-host-manager.bash
+          bash tests/flatpak-installer-fixtures.bash
       - name: Install dependencies
         run: |
-          export VERSION=$(git describe --always)
           sudo apt update
-          sudo apt install flatpak-builder flatpak ca-certificates
+          sudo apt install -y flatpak-builder flatpak ca-certificates desktop-file-utils
           git config --global protocol.file.allow always
+      - name: Validate Flatpak desktop entry
+        run: desktop-file-validate flatpak/icons/io.geph.GephGui.desktop
       - name: Set up Flatpak
         run: |
-          export VERSION=$(git describe --always)
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
       # Cache Flatpak build. Build state now lives in machine-local dirs (see
       # build-common.bash): ~/.cache/gephgui-pkg holds the host-side staging +
@@ -168,7 +184,6 @@ jobs:
             ${{ runner.os }}-npm-
       - name: Build Windows
         run: |
-          $env:VERSION = $(git describe --always)
           $env:PATH += ";C:\Users\runneradmin\.cargo\bin"
           $env:CARGO_NET_GIT_FETCH_WITH_CLI = "true"
           bash build-windows.bash
@@ -189,7 +204,6 @@ jobs:
       - name: Find Debian package
         id: find-deb
         run: |
-          export VERSION=$(git describe --always)
           DEB_FILE=$(find ./artifacts/geph-deb-oldubuntu -type f -name "*.deb" | head -n 1)
           echo "DEB_PATH=$DEB_FILE" >> $GITHUB_OUTPUT
           DEB_FILENAME=$(basename "$DEB_FILE")

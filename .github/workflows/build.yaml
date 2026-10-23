@@ -79,8 +79,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install flatpak-builder flatpak ca-certificates
+          sudo apt install -y flatpak-builder flatpak ca-certificates desktop-file-utils
           git config --global protocol.file.allow always
+      - name: Validate Flatpak desktop entry
+        run: desktop-file-validate flatpak/icons/io.geph.GephGui.desktop
       - name: Set up Flatpak
         run: |
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo

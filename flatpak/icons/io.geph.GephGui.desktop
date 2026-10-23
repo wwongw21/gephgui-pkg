@@ -12,9 +12,7 @@ Actions=MigrateHostManager;UninstallHostManager;
 [Desktop Action MigrateHostManager]
 Name=Migrate Geph host manager
 Exec=geph-migrate-host-manager
-Terminal=false
 
 [Desktop Action UninstallHostManager]
 Name=Remove shared Geph host manager for all users
 Exec=geph-uninstall-host-manager
-Terminal=false

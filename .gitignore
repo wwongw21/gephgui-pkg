@@ -7,3 +7,8 @@ repo/
 # Downloaded geph5 binaries (fetched by build scripts)
 blobs/linux-x64/geph5
 blobs/linux-x64/geph5-client
+
+# Retained task workspace artifacts; independent project copies stay in work/.
+/work/
+/outputs/
+/error.log

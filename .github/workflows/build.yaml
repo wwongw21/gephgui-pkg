@@ -7,15 +7,19 @@ env:
 
 on:
   push:
-    branches: [master, next]
+    branches: [main, master, next]
     tags:
       - "v*.*.*"
   pull_request:
-    branches: [master, next]
+    branches: [main, master, next]
 
 jobs:
   build_macos:
-    runs-on: macos-14-large
+    # Standard Intel preserves the existing universal x86_64/arm64 cross-build
+    # without a paid larger runner or the retiring macOS 14 image.
+    runs-on: macos-15-intel
+    env:
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v3
         with:

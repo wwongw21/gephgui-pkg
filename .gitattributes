@@ -1,3 +1,11 @@
 docs/reviews/2026-10-22/check-bash-syntax.sh text eol=lf
 docs/reviews/2026-10-22/bash-syntax-check.log text eol=lf
 docs/reviews/2026-10-22/bash-syntax-check.sha256 text eol=lf
+*.bash text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.desktop text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+debian/* text eol=lf

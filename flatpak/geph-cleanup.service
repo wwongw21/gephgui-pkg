@@ -3,5 +3,6 @@ Description=Geph Flatpak self-cleanup (removes the host manager after the Flatpa
 
 [Service]
 Type=oneshot
-# @BINDIR@ and @OWNER@ are templated in by install-host-manager.sh at install time.
+# Legacy staging asset required by the pinned GUI bootstrap. New installers do
+# not install or enable this unit; migration removes an older installed copy.
 ExecStart=@BINDIR@/geph-flatpak-watchdog @OWNER@ @BINDIR@
